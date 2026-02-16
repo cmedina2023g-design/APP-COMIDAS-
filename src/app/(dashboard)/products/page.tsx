@@ -79,49 +79,52 @@ export default function ProductsPage() {
                                     acc[cat].push(prod)
                                     return acc
                                 }, {} as Record<string, Product[]>) || {}
-                            ).sort((a, b) => a[0].localeCompare(b[0])).map(([category, items]) => (
-                                <AccordionItem key={category} value={category} className="border rounded-lg px-4 bg-card">
-                                    <AccordionTrigger className="hover:no-underline py-3">
-                                        <div className="flex items-center gap-4">
-                                            <span className="font-semibold text-lg">{category}</span>
-                                            <Badge variant="secondary" className="text-xs font-normal">
-                                                {items.length} productos
-                                            </Badge>
-                                        </div>
-                                    </AccordionTrigger>
-                                    <AccordionContent>
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="w-[40%]">Nombre</TableHead>
-                                                    <TableHead>Precio</TableHead>
-                                                    <TableHead>Estado</TableHead>
-                                                    <TableHead className="text-right">Acciones</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {items.map((prod) => (
-                                                    <TableRow key={prod.id}>
-                                                        <TableCell className="font-medium">{prod.name}</TableCell>
-                                                        <TableCell>${prod.price.toLocaleString()}</TableCell>
-                                                        <TableCell>
-                                                            {prod.active ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Activo</Badge> : <Badge variant="secondary">Inactivo</Badge>}
-                                                        </TableCell>
-                                                        <TableCell className="text-right flex justify-end gap-2">
-                                                            <Button variant="ghost" size="icon" onClick={() => handleEdit(prod)}>
-                                                                <Edit className="h-4 w-4 text-blue-600" />
-                                                            </Button>
-                                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(prod.id)}>
-                                                                <Trash2 className="h-4 w-4 text-red-600" />
-                                                            </Button>
-                                                        </TableCell>
+                            ).sort((a, b) => a[0].localeCompare(b[0])).map(([category, items]) => {
+                                const productList = items || [];
+                                return (
+                                    <AccordionItem key={category} value={category} className="border rounded-lg px-4 bg-card">
+                                        <AccordionTrigger className="hover:no-underline py-3">
+                                            <div className="flex items-center gap-4">
+                                                <span className="font-semibold text-lg">{category}</span>
+                                                <Badge variant="secondary" className="text-xs font-normal">
+                                                    {productList.length} productos
+                                                </Badge>
+                                            </div>
+                                        </AccordionTrigger>
+                                        <AccordionContent>
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead className="w-[40%]">Nombre</TableHead>
+                                                        <TableHead>Precio</TableHead>
+                                                        <TableHead>Estado</TableHead>
+                                                        <TableHead className="text-right">Acciones</TableHead>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </AccordionContent>
-                                </AccordionItem>
-                            ))}
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {productList.map((prod) => (
+                                                        <TableRow key={prod.id}>
+                                                            <TableCell className="font-medium">{prod.name}</TableCell>
+                                                            <TableCell>${prod.price.toLocaleString()}</TableCell>
+                                                            <TableCell>
+                                                                {prod.active ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Activo</Badge> : <Badge variant="secondary">Inactivo</Badge>}
+                                                            </TableCell>
+                                                            <TableCell className="text-right flex justify-end gap-2">
+                                                                <Button variant="ghost" size="icon" onClick={() => handleEdit(prod)}>
+                                                                    <Edit className="h-4 w-4 text-blue-600" />
+                                                                </Button>
+                                                                <Button variant="ghost" size="icon" onClick={() => handleDelete(prod.id)}>
+                                                                    <Trash2 className="h-4 w-4 text-red-600" />
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                )
+                            })}
 
                             {filteredProducts?.length === 0 && (
                                 <div className="text-center py-10 text-muted-foreground border rounded-lg">
