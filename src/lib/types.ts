@@ -151,7 +151,9 @@ export type AllEmployeesSummary = {
     employee_id: string
     employee_name: string
     role: string
+    total_sales: number
     total_meals: number
+    net_amount: number
     meal_count: number
     meal_details: Array<{
         product_name: string
