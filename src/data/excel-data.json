@@ -1,0 +1,1742 @@
+[
+  {
+    "name": "CRECIMIENTO VENTAS",
+    "area": "ECONOMICO",
+    "target": {
+      "operator": ">",
+      "value": 0.03
+    },
+    "results": {
+      "BELISARIO": {
+        "value": -0.0627,
+        "score": 0
+      },
+      "CABRA ANDALUZ": {
+        "value": -0.0609,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": -0.0339,
+        "score": 0
+      },
+      "LA HERENCIA": {
+        "value": -0.1285,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": -0.1047,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0.264,
+        "score": 0.045500000000000006
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.0041,
+        "score": 0
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 1.3038265955009032,
+        "score": 0.045500000000000006
+      },
+      "TAXCO": {
+        "value": -0.02,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": -0.048889177604904965,
+        "score": 0
+      },
+      "WAN": {
+        "value": -0.0376,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": -0.0324,
+        "score": 0
+      }
+    }
+  },
+  {
+    "name": "CUMPLIMIENTO PRESUPUESTAL",
+    "area": "",
+    "target": {
+      "operator": ">=",
+      "value": 0
+    },
+    "results": {
+      "BELISARIO": {
+        "value": -0.0813,
+        "score": 0
+      },
+      "CABRA ANDALUZ": {
+        "value": -0.244,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": -0.1302,
+        "score": 0
+      },
+      "LA HERENCIA": {
+        "value": -0.1485,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": -0.1107,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": -0.155,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": -0.13,
+        "score": 0
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 1.037990063985555,
+        "score": 0.026000000000000002
+      },
+      "TAXCO": {
+        "value": -0.1023,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": -0.04284668495263355,
+        "score": 0
+      },
+      "WAN": {
+        "value": -0.11,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": -0.0038,
+        "score": 0
+      }
+    }
+  },
+  {
+    "name": "COSTO DE LA MERCANCIA VENDIDA",
+    "area": "",
+    "target": {
+      "operator": "<=",
+      "value": 0.35
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.3466,
+        "score": 0.045500000000000006
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.3191,
+        "score": 0.045500000000000006
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.3218,
+        "score": 0.045500000000000006
+      },
+      "LA HERENCIA": {
+        "value": 0.2936,
+        "score": 0.045500000000000006
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.32,
+        "score": 0.045500000000000006
+      },
+      "POSADA LEON": {
+        "value": 0.2988,
+        "score": 0.045500000000000006
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.3367,
+        "score": 0.045500000000000006
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.3384,
+        "score": 0.045500000000000006
+      },
+      "TAXCO": {
+        "value": 0.31,
+        "score": 0.045500000000000006
+      },
+      "VICTORIA": {
+        "value": 0.306,
+        "score": 0.045500000000000006
+      },
+      "WAN": {
+        "value": 0.296,
+        "score": 0.045500000000000006
+      },
+      "YACKY CHAN": {
+        "value": 0.3076,
+        "score": 0.045500000000000006
+      }
+    }
+  },
+  {
+    "name": "MARGEN BRUTO",
+    "area": "",
+    "target": {
+      "operator": ">=",
+      "value": 0.65
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.5969,
+        "score": 0
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.6404,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.663,
+        "score": 0.0325
+      },
+      "LA HERENCIA": {
+        "value": 0.6707,
+        "score": 0.0325
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.63,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0.6551,
+        "score": 0.0325
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.6341,
+        "score": 0
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.633,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 0.6478,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": 0.6567,
+        "score": 0.0325
+      },
+      "WAN": {
+        "value": 0.643,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": 0.6796,
+        "score": 0.0325
+      }
+    }
+  },
+  {
+    "name": "NOMINA / VENTAS",
+    "area": "",
+    "target": {
+      "operator": "<=",
+      "value": 0.22
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.21,
+        "score": 0.045500000000000006
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.2091,
+        "score": 0.045500000000000006
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.22,
+        "score": 0.045500000000000006
+      },
+      "LA HERENCIA": {
+        "value": 0.23,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.18,
+        "score": 0.045500000000000006
+      },
+      "POSADA LEON": {
+        "value": 0.2246,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.2128,
+        "score": 0.045500000000000006
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.1775,
+        "score": 0.045500000000000006
+      },
+      "TAXCO": {
+        "value": 0.2004,
+        "score": 0.045500000000000006
+      },
+      "VICTORIA": {
+        "value": 0.1899,
+        "score": 0.045500000000000006
+      },
+      "WAN": {
+        "value": 0.23,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": 0.21,
+        "score": 0.045500000000000006
+      }
+    }
+  },
+  {
+    "name": "PUNTO DE EQUILIBRIO / VENTAS",
+    "area": "",
+    "target": {
+      "operator": "<",
+      "value": 0.7
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.67,
+        "score": 0.026000000000000002
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.7563,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.67,
+        "score": 0.026000000000000002
+      },
+      "LA HERENCIA": {
+        "value": 0.73,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.76,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0.8008,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.6607,
+        "score": 0.026000000000000002
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.6067,
+        "score": 0.026000000000000002
+      },
+      "TAXCO": {
+        "value": 0.6858,
+        "score": 0.026000000000000002
+      },
+      "VICTORIA": {
+        "value": 0.664,
+        "score": 0.026000000000000002
+      },
+      "WAN": {
+        "value": 0.73,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": 0.62,
+        "score": 0.026000000000000002
+      }
+    }
+  },
+  {
+    "name": "GASTOS VARIABLES / VENTAS",
+    "area": "",
+    "target": {
+      "operator": "<",
+      "value": 0.06
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.1,
+        "score": 0
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.0591,
+        "score": 0.0325
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.0508,
+        "score": 0.0325
+      },
+      "LA HERENCIA": {
+        "value": 0.0964,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.0499,
+        "score": 0.0325
+      },
+      "POSADA LEON": {
+        "value": 0.0613,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.0659,
+        "score": 0
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.1128,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 0.0593,
+        "score": 0.0325
+      },
+      "VICTORIA": {
+        "value": 0.0905934729424399,
+        "score": 0
+      },
+      "WAN": {
+        "value": 0.0572,
+        "score": 0.0325
+      },
+      "YACKY CHAN": {
+        "value": 0.0796,
+        "score": 0
+      }
+    }
+  },
+  {
+    "name": "MARGEN OPERATIVO (EBITDA)",
+    "area": "",
+    "target": {
+      "operator": ">",
+      "value": 0.19
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.1333,
+        "score": 0
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.1094,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.1727,
+        "score": 0
+      },
+      "LA HERENCIA": {
+        "value": 0.1339,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.1192,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0.0813,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.1536,
+        "score": 0
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.1445,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 0.1496,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": 0.13575574474318597,
+        "score": 0
+      },
+      "WAN": {
+        "value": 0.107,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": 0.1845,
+        "score": 0
+      }
+    }
+  },
+  {
+    "name": "MARGENN NETO",
+    "area": "",
+    "target": {
+      "operator": ">",
+      "value": 0.16
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.19,
+        "score": 0.0325
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.026,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.1501,
+        "score": 0
+      },
+      "LA HERENCIA": {
+        "value": 0.1049,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.0328,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0.0458,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.1313,
+        "score": 0
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.1446,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 0.1276,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": 0.08898845610184465,
+        "score": 0
+      },
+      "WAN": {
+        "value": 0.07,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": 0.1429,
+        "score": 0
+      }
+    }
+  },
+  {
+    "name": "CARTERA / VENTAS",
+    "area": "",
+    "target": {
+      "operator": "<",
+      "value": 0.15
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.1,
+        "score": 0.045500000000000006
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.1408,
+        "score": 0.045500000000000006
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.2055,
+        "score": 0
+      },
+      "LA HERENCIA": {
+        "value": 0.0891,
+        "score": 0.045500000000000006
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.1571,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0.2454,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.1176,
+        "score": 0.045500000000000006
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.2273759722794867,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 0.2037,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": 0,
+        "score": 0.045500000000000006
+      },
+      "WAN": {
+        "value": 0.2866,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": 0.0465,
+        "score": 0.045500000000000006
+      }
+    }
+  },
+  {
+    "name": "TASA INTERES MENSUAL (TIR / ROI)",
+    "area": "",
+    "target": {
+      "operator": ">",
+      "value": 0.025
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.04,
+        "score": 0.052000000000000005
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.0205,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.0281,
+        "score": 0.052000000000000005
+      },
+      "LA HERENCIA": {
+        "value": 0.0112,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.0153,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0.0119,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.0579,
+        "score": 0.052000000000000005
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.02948960302457467,
+        "score": 0.052000000000000005
+      },
+      "TAXCO": {
+        "value": 0.026,
+        "score": 0.052000000000000005
+      },
+      "VICTORIA": {
+        "value": 0.021032778172852762,
+        "score": 0
+      },
+      "WAN": {
+        "value": 0.0123,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": 0.0384,
+        "score": 0.052000000000000005
+      }
+    }
+  },
+  {
+    "name": "R / VENTAS",
+    "area": "",
+    "target": {
+      "operator": ">",
+      "value": 0.12
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.1253,
+        "score": 0.195
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.09,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.1201,
+        "score": 0.195
+      },
+      "LA HERENCIA": {
+        "value": 0.0544,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.0416,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0.0254,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.1379,
+        "score": 0.195
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.1012,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 0.0918,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": 0.08898845610184465,
+        "score": 0
+      },
+      "WAN": {
+        "value": 0.06,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": 0.1426,
+        "score": 0.195
+      }
+    }
+  },
+  {
+    "name": "PROVSIONES / IMPUESTOS",
+    "area": "",
+    "target": {
+      "operator": ">",
+      "value": 0.5
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.51,
+        "score": 0.039
+      },
+      "CABRA ANDALUZ": {
+        "value": 0,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.22,
+        "score": 0
+      },
+      "LA HERENCIA": {
+        "value": 1.63,
+        "score": 0.039
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.18,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.64,
+        "score": 0.039
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 1,
+        "score": 0.039
+      },
+      "TAXCO": {
+        "value": 0.16,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": 0.7813,
+        "score": 0.039
+      },
+      "WAN": {
+        "value": 0,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": 1.22,
+        "score": 0.039
+      }
+    }
+  },
+  {
+    "name": "CARTERA / INVENTARIO",
+    "area": "OPERATIVO",
+    "target": {
+      "operator": "<",
+      "value": 0.8
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.3056,
+        "score": 0.027000000000000003
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.8357,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.5523,
+        "score": 0.027000000000000003
+      },
+      "LA HERENCIA": {
+        "value": 0.758,
+        "score": 0.027000000000000003
+      },
+      "OCCA MEDELLIN": {
+        "value": 1.13,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 1.8393087299989168,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 1.0674,
+        "score": 0
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 1.571191789023925,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 1.28,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": 0,
+        "score": 0.027000000000000003
+      },
+      "WAN": {
+        "value": 2.0233779306339694,
+        "score": 0
+      },
+      "YACKY CHAN": {
+        "value": 0.3496072801605892,
+        "score": 0.027000000000000003
+      }
+    }
+  },
+  {
+    "name": "LOCATIVO (CHECK LIST)",
+    "area": "",
+    "target": {
+      "operator": "",
+      "value": "SI"
+    },
+    "results": {
+      "BELISARIO": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "CABRA ANDALUZ": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "LA HERENCIA": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "OCCA MEDELLIN": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "POSADA LEON": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "SOCIOS PROVENZA": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "TAXCO": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "VICTORIA": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "WAN": {
+        "value": "SI",
+        "score": 0.033
+      },
+      "YACKY CHAN": {
+        "value": "NO",
+        "score": 0
+      }
+    }
+  },
+  {
+    "name": "LEGAL (CHECK LIST)",
+    "area": "",
+    "target": {
+      "operator": "",
+      "value": "SI"
+    },
+    "results": {
+      "BELISARIO": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "CABRA ANDALUZ": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "LA HERENCIA": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "OCCA MEDELLIN": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "POSADA LEON": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "SOCIOS PROVENZA": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "TAXCO": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "VICTORIA": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "WAN": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      },
+      "YACKY CHAN": {
+        "value": "SI",
+        "score": 0.020000000000000004
+      }
+    }
+  },
+  {
+    "name": "CUMPLIMIENTO SANIDAD",
+    "area": "",
+    "target": {
+      "operator": ">",
+      "value": 0.65
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "LA HERENCIA": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "POSADA LEON": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "TAXCO": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "VICTORIA": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "WAN": {
+        "value": 0.8,
+        "score": 0.020000000000000004
+      },
+      "YACKY CHAN": {
+        "value": 0.75,
+        "score": 0.020000000000000004
+      }
+    }
+  },
+  {
+    "name": "TRIP ADVISOR",
+    "area": "SERVICIO",
+    "target": {
+      "operator": ">",
+      "value": 4.5
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 4.6,
+        "score": 0.03
+      },
+      "CABRA ANDALUZ": {
+        "value": 4.7,
+        "score": 0.03
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 4.8,
+        "score": 0.03
+      },
+      "LA HERENCIA": {
+        "value": 3,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": 4.4,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 4.5,
+        "score": 0.03
+      },
+      "SOCIOS PROVENZA": {
+        "value": 3,
+        "score": 0
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 3,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 4.3,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": 4,
+        "score": 0
+      },
+      "WAN": {
+        "value": 4.8,
+        "score": 0.03
+      },
+      "YACKY CHAN": {
+        "value": 4.3,
+        "score": 0
+      }
+    }
+  },
+  {
+    "name": "GOOGLE",
+    "area": "",
+    "target": {
+      "operator": ">",
+      "value": 4.5
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 4.7,
+        "score": 0.06999999999999999
+      },
+      "CABRA ANDALUZ": {
+        "value": 0,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 3.8,
+        "score": 0
+      },
+      "LA HERENCIA": {
+        "value": 4.6,
+        "score": 0.06999999999999999
+      },
+      "OCCA MEDELLIN": {
+        "value": 4.6,
+        "score": 0.06999999999999999
+      },
+      "POSADA LEON": {
+        "value": 4.6,
+        "score": 0.06999999999999999
+      },
+      "SOCIOS PROVENZA": {
+        "value": 4.1,
+        "score": 0
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 4.1,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 4.6,
+        "score": 0.06999999999999999
+      },
+      "VICTORIA": {
+        "value": 4.7,
+        "score": 0.06999999999999999
+      },
+      "WAN": {
+        "value": 4.7,
+        "score": 0.06999999999999999
+      },
+      "YACKY CHAN": {
+        "value": 4.5,
+        "score": 0.06999999999999999
+      }
+    }
+  },
+  {
+    "name": "5 ESRELLAS",
+    "area": "",
+    "target": {
+      "operator": "",
+      "value": ""
+    },
+    "results": {
+      "BELISARIO": {
+        "value": "",
+        "score": ""
+      },
+      "CABRA ANDALUZ": {
+        "value": "",
+        "score": ""
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": "",
+        "score": ""
+      },
+      "LA HERENCIA": {
+        "value": "",
+        "score": ""
+      },
+      "OCCA MEDELLIN": {
+        "value": "",
+        "score": ""
+      },
+      "POSADA LEON": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS PROVENZA": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": "",
+        "score": ""
+      },
+      "TAXCO": {
+        "value": "",
+        "score": ""
+      },
+      "VICTORIA": {
+        "value": "",
+        "score": ""
+      },
+      "WAN": {
+        "value": "",
+        "score": ""
+      },
+      "YACKY CHAN": {
+        "value": "",
+        "score": ""
+      }
+    }
+  },
+  {
+    "name": "REDES (ALCANCE)",
+    "area": "MERCADEO",
+    "target": {
+      "operator": "",
+      "value": ""
+    },
+    "results": {
+      "BELISARIO": {
+        "value": "",
+        "score": ""
+      },
+      "CABRA ANDALUZ": {
+        "value": "",
+        "score": ""
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": "",
+        "score": ""
+      },
+      "LA HERENCIA": {
+        "value": "",
+        "score": ""
+      },
+      "OCCA MEDELLIN": {
+        "value": "",
+        "score": ""
+      },
+      "POSADA LEON": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS PROVENZA": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": "",
+        "score": ""
+      },
+      "TAXCO": {
+        "value": "",
+        "score": ""
+      },
+      "VICTORIA": {
+        "value": "",
+        "score": ""
+      },
+      "WAN": {
+        "value": "",
+        "score": ""
+      },
+      "YACKY CHAN": {
+        "value": "",
+        "score": ""
+      }
+    }
+  },
+  {
+    "name": "REDES (AUMENTO SEGUIDORES)",
+    "area": "",
+    "target": {
+      "operator": "",
+      "value": ""
+    },
+    "results": {
+      "BELISARIO": {
+        "value": "",
+        "score": ""
+      },
+      "CABRA ANDALUZ": {
+        "value": "",
+        "score": ""
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": "",
+        "score": ""
+      },
+      "LA HERENCIA": {
+        "value": "",
+        "score": ""
+      },
+      "OCCA MEDELLIN": {
+        "value": "",
+        "score": ""
+      },
+      "POSADA LEON": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS PROVENZA": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": "",
+        "score": ""
+      },
+      "TAXCO": {
+        "value": "",
+        "score": ""
+      },
+      "VICTORIA": {
+        "value": "",
+        "score": ""
+      },
+      "WAN": {
+        "value": "",
+        "score": ""
+      },
+      "YACKY CHAN": {
+        "value": "",
+        "score": ""
+      }
+    }
+  },
+  {
+    "name": "REDES (LEADS)",
+    "area": "",
+    "target": {
+      "operator": "",
+      "value": ""
+    },
+    "results": {
+      "BELISARIO": {
+        "value": "",
+        "score": ""
+      },
+      "CABRA ANDALUZ": {
+        "value": "",
+        "score": ""
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": "",
+        "score": ""
+      },
+      "LA HERENCIA": {
+        "value": "",
+        "score": ""
+      },
+      "OCCA MEDELLIN": {
+        "value": "",
+        "score": ""
+      },
+      "POSADA LEON": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS PROVENZA": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": "",
+        "score": ""
+      },
+      "TAXCO": {
+        "value": "",
+        "score": ""
+      },
+      "VICTORIA": {
+        "value": "",
+        "score": ""
+      },
+      "WAN": {
+        "value": "",
+        "score": ""
+      },
+      "YACKY CHAN": {
+        "value": "",
+        "score": ""
+      }
+    }
+  },
+  {
+    "name": "REDES (ENGAGEMENT)",
+    "area": "",
+    "target": {
+      "operator": "",
+      "value": ""
+    },
+    "results": {
+      "BELISARIO": {
+        "value": "",
+        "score": ""
+      },
+      "CABRA ANDALUZ": {
+        "value": "",
+        "score": ""
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": "",
+        "score": ""
+      },
+      "LA HERENCIA": {
+        "value": "",
+        "score": ""
+      },
+      "OCCA MEDELLIN": {
+        "value": "",
+        "score": ""
+      },
+      "POSADA LEON": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS PROVENZA": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": "",
+        "score": ""
+      },
+      "TAXCO": {
+        "value": "",
+        "score": ""
+      },
+      "VICTORIA": {
+        "value": "",
+        "score": ""
+      },
+      "WAN": {
+        "value": "",
+        "score": ""
+      },
+      "YACKY CHAN": {
+        "value": "",
+        "score": ""
+      }
+    }
+  },
+  {
+    "name": "VALOR PAUTA / VENTA",
+    "area": "",
+    "target": {
+      "operator": "",
+      "value": ""
+    },
+    "results": {
+      "BELISARIO": {
+        "value": "",
+        "score": ""
+      },
+      "CABRA ANDALUZ": {
+        "value": "",
+        "score": ""
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": "",
+        "score": ""
+      },
+      "LA HERENCIA": {
+        "value": "",
+        "score": ""
+      },
+      "OCCA MEDELLIN": {
+        "value": "",
+        "score": ""
+      },
+      "POSADA LEON": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS PROVENZA": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": "",
+        "score": ""
+      },
+      "TAXCO": {
+        "value": "",
+        "score": ""
+      },
+      "VICTORIA": {
+        "value": "",
+        "score": ""
+      },
+      "WAN": {
+        "value": "",
+        "score": ""
+      },
+      "YACKY CHAN": {
+        "value": "",
+        "score": ""
+      }
+    }
+  },
+  {
+    "name": "GASTOS MERCADEO / VENTAS",
+    "area": "",
+    "target": {
+      "operator": "<",
+      "value": 0.03
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.0321,
+        "score": 0
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.0203,
+        "score": 0.04000000000000001
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.0232,
+        "score": 0.04000000000000001
+      },
+      "LA HERENCIA": {
+        "value": 0.0282,
+        "score": 0.04000000000000001
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.019,
+        "score": 0.04000000000000001
+      },
+      "POSADA LEON": {
+        "value": 0.0365,
+        "score": 0
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.0266,
+        "score": 0.04000000000000001
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.03469501350546343,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 0.0216,
+        "score": 0.04000000000000001
+      },
+      "VICTORIA": {
+        "value": 0.05114577173791275,
+        "score": 0
+      },
+      "WAN": {
+        "value": 0.0138,
+        "score": 0.04000000000000001
+      },
+      "YACKY CHAN": {
+        "value": 0.0238,
+        "score": 0.04000000000000001
+      }
+    }
+  },
+  {
+    "name": "ROI ACTIVACIONES",
+    "area": "",
+    "target": {
+      "operator": "",
+      "value": ""
+    },
+    "results": {
+      "BELISARIO": {
+        "value": "",
+        "score": ""
+      },
+      "CABRA ANDALUZ": {
+        "value": "",
+        "score": ""
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": "",
+        "score": ""
+      },
+      "LA HERENCIA": {
+        "value": "",
+        "score": ""
+      },
+      "OCCA MEDELLIN": {
+        "value": "",
+        "score": ""
+      },
+      "POSADA LEON": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS PROVENZA": {
+        "value": "",
+        "score": ""
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": "",
+        "score": ""
+      },
+      "TAXCO": {
+        "value": "",
+        "score": ""
+      },
+      "VICTORIA": {
+        "value": "",
+        "score": ""
+      },
+      "WAN": {
+        "value": "",
+        "score": ""
+      },
+      "YACKY CHAN": {
+        "value": "",
+        "score": ""
+      }
+    }
+  },
+  {
+    "name": "ROTACION",
+    "area": "RRHH",
+    "target": {
+      "operator": "<",
+      "value": 0.085
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.0556,
+        "score": 0.020000000000000004
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.14,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.1,
+        "score": 0
+      },
+      "LA HERENCIA": {
+        "value": 0,
+        "score": 0.020000000000000004
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.1333,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0.0476,
+        "score": 0.020000000000000004
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.0769,
+        "score": 0.020000000000000004
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.4,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 0.1081,
+        "score": 0
+      },
+      "VICTORIA": {
+        "value": 0,
+        "score": 0.020000000000000004
+      },
+      "WAN": {
+        "value": 0.0645,
+        "score": 0.020000000000000004
+      },
+      "YACKY CHAN": {
+        "value": 0.0333,
+        "score": 0.020000000000000004
+      }
+    }
+  },
+  {
+    "name": "AUSENTISMO",
+    "area": "",
+    "target": {
+      "operator": "<",
+      "value": 0.02
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0.0175,
+        "score": 0.015
+      },
+      "CABRA ANDALUZ": {
+        "value": 0.0477,
+        "score": 0
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0.0111,
+        "score": 0.015
+      },
+      "LA HERENCIA": {
+        "value": 0.0229,
+        "score": 0
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.0374,
+        "score": 0
+      },
+      "POSADA LEON": {
+        "value": 0.0054,
+        "score": 0.015
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.0047,
+        "score": 0.015
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0,
+        "score": 0.015
+      },
+      "TAXCO": {
+        "value": 0.0116,
+        "score": 0.015
+      },
+      "VICTORIA": {
+        "value": 0.0637,
+        "score": 0
+      },
+      "WAN": {
+        "value": 0.0092,
+        "score": 0.015
+      },
+      "YACKY CHAN": {
+        "value": 0,
+        "score": 0.015
+      }
+    }
+  },
+  {
+    "name": "ACCIDENTES LABORALES",
+    "area": "",
+    "target": {
+      "operator": "<",
+      "value": 0.015
+    },
+    "results": {
+      "BELISARIO": {
+        "value": 0,
+        "score": 0.015
+      },
+      "CABRA ANDALUZ": {
+        "value": 0,
+        "score": 0.015
+      },
+      "GUZMAN Y MEZCAL": {
+        "value": 0,
+        "score": 0.015
+      },
+      "LA HERENCIA": {
+        "value": 0.0047,
+        "score": 0.015
+      },
+      "OCCA MEDELLIN": {
+        "value": 0.0025,
+        "score": 0.015
+      },
+      "POSADA LEON": {
+        "value": 0,
+        "score": 0.015
+      },
+      "SOCIOS PROVENZA": {
+        "value": 0.0519,
+        "score": 0
+      },
+      "SOCIOS SAN LUCAS": {
+        "value": 0.0519,
+        "score": 0
+      },
+      "TAXCO": {
+        "value": 0,
+        "score": 0.015
+      },
+      "VICTORIA": {
+        "value": 0,
+        "score": 0.015
+      },
+      "WAN": {
+        "value": 0,
+        "score": 0.015
+      },
+      "YACKY CHAN": {
+        "value": 0,
+        "score": 0.015
+      }
+    }
+  }
+]
