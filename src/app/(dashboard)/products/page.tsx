@@ -78,7 +78,7 @@ export default function ProductsPage() {
                                     if (!acc[cat]) acc[cat] = []
                                     acc[cat].push(prod)
                                     return acc
-                                }, {} as Record<string, typeof products>) || {}
+                                }, {} as Record<string, Product[]>) || {}
                             ).sort((a, b) => a[0].localeCompare(b[0])).map(([category, items]) => (
                                 <AccordionItem key={category} value={category} className="border rounded-lg px-4 bg-card">
                                     <AccordionTrigger className="hover:no-underline py-3">
