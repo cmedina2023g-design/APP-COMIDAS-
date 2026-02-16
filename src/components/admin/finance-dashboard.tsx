@@ -171,7 +171,7 @@ export function FinanceDashboard() {
                                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                                     <XAxis type="number" hide />
                                     <YAxis type="category" dataKey="name" width={100} />
-                                    <RechartsTooltip formatter={(val: number) => formatCurrency(val)} />
+                                    <RechartsTooltip formatter={(val: number | undefined) => formatCurrency(val ?? 0)} />
                                     <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={30} />
                                 </BarChart>
                             </ResponsiveContainer>
@@ -195,7 +195,7 @@ export function FinanceDashboard() {
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="name" />
                                     <YAxis />
-                                    <RechartsTooltip formatter={(val: number) => formatCurrency(val)} />
+                                    <RechartsTooltip formatter={(val: number | undefined) => formatCurrency(val ?? 0)} />
                                     <Bar dataKey="value" fill="#8884d8" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
@@ -229,7 +229,7 @@ export function FinanceDashboard() {
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
-                                    <RechartsTooltip formatter={(val: number) => formatCurrency(val)} />
+                                    <RechartsTooltip formatter={(val: number | undefined) => formatCurrency(val ?? 0)} />
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>

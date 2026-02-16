@@ -61,7 +61,9 @@ export function IngredientDialog({ ingredientToEdit, open, onOpenChange }: Ingre
                     unit,
                     min_stock: Number(minStock),
                     category: category || null,
-                    active: true
+                    active: true,
+                    stock: 0,
+                    cost_unit: 0
                 })
             }
             onOpenChange(false)
