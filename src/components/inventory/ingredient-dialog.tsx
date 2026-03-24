@@ -24,6 +24,7 @@ export function IngredientDialog({ ingredientToEdit, open, onOpenChange }: Ingre
     const [name, setName] = useState('')
     const [unit, setUnit] = useState('g')
     const [minStock, setMinStock] = useState('0')
+    const [costUnit, setCostUnit] = useState('0')
     const [category, setCategory] = useState('')
     const [isCustomCategory, setIsCustomCategory] = useState(false)
 
@@ -32,12 +33,14 @@ export function IngredientDialog({ ingredientToEdit, open, onOpenChange }: Ingre
             setName(ingredientToEdit.name)
             setUnit(ingredientToEdit.unit)
             setMinStock(ingredientToEdit.min_stock.toString())
+            setCostUnit(ingredientToEdit.cost_unit?.toString() || '0')
             setCategory(ingredientToEdit.category || '')
             setIsCustomCategory(false)
         } else {
             setName('')
             setUnit('g')
             setMinStock('0')
+            setCostUnit('0')
             setCategory('')
             setIsCustomCategory(false)
         }
@@ -53,7 +56,8 @@ export function IngredientDialog({ ingredientToEdit, open, onOpenChange }: Ingre
                     name,
                     unit,
                     min_stock: Number(minStock),
-                    category
+                    category,
+                    cost_unit: Number(costUnit)
                 })
             } else {
                 await createMutation.mutateAsync({
@@ -63,7 +67,7 @@ export function IngredientDialog({ ingredientToEdit, open, onOpenChange }: Ingre
                     category: category || null,
                     active: true,
                     stock: 0,
-                    cost_unit: 0
+                    cost_unit: Number(costUnit)
                 })
             }
             onOpenChange(false)
@@ -83,6 +87,11 @@ export function IngredientDialog({ ingredientToEdit, open, onOpenChange }: Ingre
                     <div className="space-y-2">
                         <Label>Nombre</Label>
                         <Input value={name} onChange={e => setName(e.target.value)} required placeholder="Ej: Pan Perro" />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Costo por Unidad ($)</Label>
+                        <Input type="number" value={costUnit} onChange={e => setCostUnit(e.target.value)} min="0" placeholder="0" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

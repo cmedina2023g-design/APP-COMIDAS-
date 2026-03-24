@@ -17,7 +17,8 @@ import {
     ChevronRight,
     ChevronDown,
     Clock,
-    ArrowLeft
+    ArrowLeft,
+    AlertTriangle
 } from 'lucide-react'
 import Link from 'next/link'
 import {
@@ -45,7 +46,7 @@ export default function CorredoresPage() {
                     </Button>
                 </Link>
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-800">Despacho de Corredores</h1>
+                    <h1 className="text-2xl font-bold text-slate-800">Inventario de Corredores</h1>
                     <p className="text-muted-foreground">Asigna y controla el inventario de los corredores.</p>
                 </div>
             </div>
@@ -131,12 +132,14 @@ function InventoryItem({ item }: { item: any }) {
     const returnInventory = useReturnInventory()
 
     const assignedQty = item.assigned_qty || 0
-    const currentReturn = parseInt(returnQty) || 0
-    const isOverLimit = currentReturn > assignedQty
-    const isInvalid = isOverLimit || currentReturn < 0
+    const currentReturn = returnQty === '' ? null : parseInt(returnQty, 10)
+    const isOverLimit = currentReturn !== null && !Number.isNaN(currentReturn) && currentReturn > assignedQty
+    const isInvalid = currentReturn === null || Number.isNaN(currentReturn) || currentReturn < 0 || isOverLimit
+
+    const discrepancy = assignedQty - (item.returned_qty || 0) - (item.sold_qty || 0)
 
     const handleReturn = () => {
-        if (isInvalid) return
+        if (isInvalid || currentReturn === null || Number.isNaN(currentReturn)) return
 
         returnInventory.mutate({
             assignment_id: item.id,
@@ -154,7 +157,7 @@ function InventoryItem({ item }: { item: any }) {
         return new Date(dateStr).toLocaleTimeString('es-CO', {
             hour: '2-digit',
             minute: '2-digit',
-            hour12: true
+            hour12: false
         })
     }
 
@@ -194,6 +197,13 @@ function InventoryItem({ item }: { item: any }) {
                     <p className="text-xs text-muted-foreground">Vendido</p>
                     <p className={cn("font-bold", item.sold_qty < 0 ? "text-red-500" : "text-green-600")}>{item.sold_qty}</p>
                 </div>
+
+                {item.status === 'active' && discrepancy !== 0 && (
+                    <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Discrepancia: {discrepancy > 0 ? '+' : ''}{discrepancy}
+                    </Badge>
+                )}
 
                 {item.status === 'active' ? (
                     <Dialog open={returnOpen} onOpenChange={setReturnOpen}>

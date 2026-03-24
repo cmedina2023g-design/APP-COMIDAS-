@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { Trash2, Plus, Loader2 } from 'lucide-react'
 import { useShifts, useUpdateShift } from '@/hooks/use-sessions'
 import { usePaymentMethods, useCreatePaymentMethod, useTogglePaymentMethod, useDeletePaymentMethod } from '@/hooks/use-settings'
-import { useProfiles, useUpdateProfileRole, UserRole } from '@/hooks/use-profiles'
+import { useProfiles, useUpdateProfileRole, useToggleProfileActive, UserRole } from '@/hooks/use-profiles'
 import { createEmployeeUser } from '@/app/actions/auth-actions'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 function CreateUserForm({ organizationId }: { organizationId?: string }) {
     const [loading, setLoading] = useState(false)
+    const [formKey, setFormKey] = useState(0)
     const queryClient = useQueryClient()
 
     async function onSubmit(formData: FormData) {
@@ -36,7 +37,7 @@ function CreateUserForm({ organizationId }: { organizationId?: string }) {
             } else {
                 toast.success('Usuario creado correctamente')
                 queryClient.invalidateQueries({ queryKey: ['profiles'] })
-                // Optional: reset form via key or ref
+                setFormKey(k => k + 1)
             }
         } catch (e) {
             toast.error('Error de conexión')
@@ -46,7 +47,7 @@ function CreateUserForm({ organizationId }: { organizationId?: string }) {
     }
 
     return (
-        <form action={onSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mb-6 p-4 border rounded-lg bg-slate-50 dark:bg-slate-900/50">
+        <form key={formKey} action={onSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mb-6 p-4 border rounded-lg bg-slate-50 dark:bg-slate-900/50">
             <div className="space-y-2">
                 <Label>Nombre</Label>
                 <Input name="fullName" placeholder="Ej: Vendedor 1" required />
@@ -57,7 +58,7 @@ function CreateUserForm({ organizationId }: { organizationId?: string }) {
             </div>
             <div className="space-y-2">
                 <Label>Contraseña</Label>
-                <Input name="password" type="text" placeholder="123456" required minLength={6} />
+                <Input name="password" type="password" placeholder="••••••" required minLength={6} />
             </div>
             <div className="space-y-2">
                 <Label>Rol</Label>
@@ -80,15 +81,10 @@ function ShiftCard({ shift, updateShift }: { shift: any, updateShift: any }) {
     const [startTime, setStartTime] = useState(shift.start_time)
     const [endTime, setEndTime] = useState(shift.end_time)
 
-    // Sync state if prop changes (e.g. initial load or external update)
-    // ensuring we don't overwrite user typing if they are focused? 
-    // Actually defaultValue approach is usually fine if key changes, but let's try controlled.
-
-    // Better yet: just use defaultValue but force re-render when data changes?
-    // The issue described (reverts on page change) suggests the server data IS NOT updating?
-    // Or hooks are caching old data? "vuelve y aparece de 2 a 11" suggests database didn't update or cache is stale.
-
-    // Let's force controlled inputs to be sure.
+    useEffect(() => {
+        setStartTime(shift.start_time)
+        setEndTime(shift.end_time)
+    }, [shift.start_time, shift.end_time])
 
     const handleBlurStart = () => {
         if (startTime !== shift.start_time) {
@@ -165,6 +161,7 @@ export default function SettingsPage() {
     const toggleMutation = useTogglePaymentMethod()
     const deleteMutation = useDeletePaymentMethod()
     const updateRoleMutation = useUpdateProfileRole()
+    const toggleActiveMutation = useToggleProfileActive()
 
     const [newName, setNewName] = useState('')
 
@@ -284,7 +281,15 @@ export default function SettingsPage() {
                                                     </Select>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {profile.active ? <span className="text-green-600">Activo</span> : <span className="text-red-500">Inactivo</span>}
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => toggleActiveMutation.mutate({ id: profile.id, active: !profile.active })}
+                                                        className={profile.active ? 'text-green-600 border-green-200 hover:bg-green-50' : 'text-red-500 border-red-200 hover:bg-red-50'}
+                                                        disabled={toggleActiveMutation.isPending}
+                                                    >
+                                                        {profile.active ? 'Activo' : 'Inactivo'}
+                                                    </Button>
                                                 </TableCell>
                                             </TableRow>
                                         ))}

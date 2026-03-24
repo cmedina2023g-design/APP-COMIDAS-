@@ -67,3 +67,20 @@ export function useUpdateProfileRole() {
         onError: (err: any) => toast.error('Error', { description: err.message })
     })
 }
+
+export function useToggleProfileActive() {
+    const supabase = createClient()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async ({ id, active }: { id: string, active: boolean }) => {
+            const { error } = await supabase.from('profiles').update({ active }).eq('id', id)
+            if (error) throw error
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['profiles'] })
+            toast.success('Estado actualizado')
+        },
+        onError: (err: any) => toast.error('Error', { description: err.message })
+    })
+}

@@ -33,11 +33,16 @@ export function useCreateSale() {
         }) => {
             const { user, organization_id } = await getOrCreateProfile(supabase)
 
-            // Prepare items payload
+            // Prepare items payload (including modifiers for inventory deduction)
             const payloadItems = items.map(i => ({
                 product_id: i.id,
                 qty: i.qty,
-                unit_price: i.price
+                unit_price: i.price,
+                modifiers: (i.modifiers || []).map((m: any) => ({
+                    modifier_id: m.modifier_id,
+                    modifier_name: m.name || m.modifier_name || '',
+                    extra_price: m.extra_price || 0
+                }))
             }))
 
             // Prepare payments payload
@@ -60,6 +65,7 @@ export function useCreateSale() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['sales'] })
             queryClient.invalidateQueries({ queryKey: ['products'] })
+            queryClient.invalidateQueries({ queryKey: ['products-with-stock'] })
             queryClient.invalidateQueries({ queryKey: ['ingredients'] })
             queryClient.invalidateQueries({ queryKey: ['daily-product-summary'] })
             queryClient.invalidateQueries({ queryKey: ['shift-sales'] })
@@ -188,6 +194,74 @@ export function useMarkSaleAsPaid() {
             queryClient.invalidateQueries({ queryKey: ['shift-payment-methods'] })
             queryClient.invalidateQueries({ queryKey: ['monthly-report'] })
             toast.success('Pago registrado exitosamente')
+        }
+    })
+}
+
+export function useSalesHistory(filters?: { startDate?: string, endDate?: string }) {
+    const supabase = createClient()
+    return useQuery({
+        queryKey: ['sales-history', filters],
+        queryFn: async () => {
+            const { organization_id } = await getOrCreateProfile(supabase)
+            const hasFilter = filters?.startDate || filters?.endDate
+            let query = supabase
+                .from('sales')
+                .select(`
+                    id,
+                    created_at,
+                    total,
+                    status,
+                    payment_status,
+                    payment_method:payment_methods!payment_method_id(name),
+                    seller:profiles!seller_id(full_name),
+                    sale_items(
+                        qty,
+                        unit_price,
+                        subtotal,
+                        product:products(name),
+                        sale_item_modifiers(modifier_name, extra_price)
+                    )
+                `)
+                .eq('organization_id', organization_id)
+                .order('created_at', { ascending: false })
+                .limit(hasFilter ? 500 : 200)
+
+            if (filters?.startDate) {
+                query = query.gte('created_at', filters.startDate)
+            }
+            if (filters?.endDate) {
+                query = query.lte('created_at', filters.endDate)
+            }
+
+            const { data, error } = await query
+            if (error) throw error
+            return data
+        }
+    })
+}
+
+export function useVoidSale() {
+    const supabase = createClient()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async ({ saleId, adminId }: { saleId: string, adminId: string }) => {
+            const { error } = await supabase.rpc('void_sale', {
+                p_sale_id: saleId,
+                p_admin_id: adminId
+            })
+            if (error) throw error
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales-history'] })
+            queryClient.invalidateQueries({ queryKey: ['sales'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+            queryClient.invalidateQueries({ queryKey: ['shift-sales'] })
+            toast.success('Venta anulada correctamente', { description: 'El inventario ha sido restaurado.' })
+        },
+        onError: (err: any) => {
+            toast.error('Error al anular venta', { description: err.message })
         }
     })
 }

@@ -24,6 +24,7 @@ export type Product = {
     subcategory: string | null
     active: boolean
     image_url: string | null
+    modifier_groups?: ProductModifierGroup[]
 }
 
 export type ProductRecipe = {
@@ -32,6 +33,50 @@ export type ProductRecipe = {
     ingredient_id: string
     qty: number
 }
+
+// ---- Modifiers Types ----
+export type ProductModifierGroup = {
+    id: string
+    product_id: string
+    name: string
+    min_selections: number
+    max_selections: number
+    created_at?: string
+    order_index: number
+    modifiers?: ProductModifier[] // Relational data
+}
+
+export type ProductModifier = {
+    id: string
+    group_id: string
+    name: string
+    extra_price: number
+    created_at?: string
+    order_index: number
+    recipes?: ModifierRecipe[] // Relational data
+}
+
+export type ModifierRecipe = {
+    id: string
+    modifier_id: string
+    ingredient_id: string
+    qty: number
+}
+
+export type SaleItemModifier = {
+    id?: string
+    sale_item_id?: string
+    modifier_id: string
+    modifier_name: string
+    extra_price: number
+}
+
+export type CartItem = {
+    product: Product
+    quantity: number
+    modifiers?: SaleItemModifier[]
+}
+// -------------------------
 
 export type Sale = {
     id: string

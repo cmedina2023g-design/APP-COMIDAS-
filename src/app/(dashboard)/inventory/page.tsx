@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useIngredients, useDeleteIngredient } from '@/hooks/use-inventory'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 export default function InventoryPage() {
     const { data: ingredients, isLoading, error } = useIngredients()
     const deleteMutation = useDeleteIngredient()
+    const queryClient = useQueryClient()
 
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null)
@@ -50,7 +52,7 @@ export default function InventoryPage() {
                     <p className="text-muted-foreground">Gestiona tus insumos y existencias.</p>
                 </div>
                 <div className="flex gap-2">
-                    <BulkInventoryUpload onSuccess={() => window.location.reload()} />
+                    <BulkInventoryUpload onSuccess={() => queryClient.invalidateQueries({ queryKey: ['ingredients'] })} />
                     <Link href="/inventory/audit">
                         <Button variant="outline">
                             <UtensilsCrossed className="mr-2 h-4 w-4" /> Realizar Auditoría
@@ -104,9 +106,16 @@ export default function InventoryPage() {
                                         <TableCell className="font-medium">{ing.name}</TableCell>
                                         <TableCell>{ing.category || '-'}</TableCell>
                                         <TableCell>
-                                            <span className={ing.stock <= ing.min_stock ? 'text-red-600 font-bold flex items-center gap-1' : ''}>
+                                            <span className={
+                                                ing.stock < 0
+                                                    ? 'text-red-700 font-bold flex items-center gap-1'
+                                                    : ing.stock <= ing.min_stock
+                                                        ? 'text-red-600 font-bold flex items-center gap-1'
+                                                        : ''
+                                            }>
                                                 {ing.stock}
-                                                {ing.stock <= ing.min_stock && <AlertCircle className="h-3 w-3" />}
+                                                {ing.stock < 0 && <AlertCircle className="h-3 w-3" />}
+                                                {ing.stock >= 0 && ing.stock <= ing.min_stock && <AlertCircle className="h-3 w-3" />}
                                             </span>
                                         </TableCell>
                                         <TableCell>{ing.unit}</TableCell>

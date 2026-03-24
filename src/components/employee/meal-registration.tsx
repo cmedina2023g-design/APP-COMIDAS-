@@ -2,14 +2,14 @@
 
 import { useState } from 'react'
 import { useRecordMeal, useEmployeeMealsToday, useDeleteMeal } from '@/hooks/use-employee-meals'
-import { useProducts } from '@/hooks/use-products'
+import { useProductsWithStock } from '@/hooks/use-products'
 import { useProfiles } from '@/hooks/use-profiles'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Utensils, Trash2, Plus, Minus, User } from 'lucide-react'
+import { Utensils, Trash2, Plus, Minus, User, Loader2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 
 export function MealRegistration() {
@@ -18,7 +18,7 @@ export function MealRegistration() {
     const [quantity, setQuantity] = useState(1)
     const [searchQuery, setSearchQuery] = useState('')
 
-    const { data: products = [] } = useProducts()
+    const { data: products = [] } = useProductsWithStock()
     const { data: profiles = [] } = useProfiles()
     const { data: todayMeals = [] } = useEmployeeMealsToday(selectedEmployee)
     const recordMeal = useRecordMeal()
@@ -28,7 +28,9 @@ export function MealRegistration() {
     const employees = profiles.filter(p => p.active && (p.role === 'SELLER' || p.role === 'RUNNER' || p.role === 'ADMIN'))
 
     const filteredProducts = products.filter((p: any) =>
-        p.active && p.name.toLowerCase().includes(searchQuery.toLowerCase())
+        p.active &&
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        (p.available_units === null || p.available_units === undefined || p.available_units !== 0)
     )
 
     const handleAddMeal = () => {
@@ -79,7 +81,7 @@ export function MealRegistration() {
                         <SelectContent>
                             {employees.map((emp) => (
                                 <SelectItem key={emp.id} value={emp.id}>
-                                    {emp.full_name || 'Sin nombre'} ({emp.role})
+                                    {emp.full_name || 'Sin nombre'}
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -141,7 +143,14 @@ export function MealRegistration() {
                                             >
                                                 <Minus className="h-4 w-4" />
                                             </Button>
-                                            <span className="font-bold text-lg w-12 text-center">{quantity}</span>
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                max={99}
+                                                value={quantity}
+                                                onChange={(e) => setQuantity(Math.max(1, Math.min(99, parseInt(e.target.value) || 1)))}
+                                                className="w-16 h-10 text-center font-bold text-lg"
+                                            />
                                             <Button
                                                 size="icon"
                                                 variant="outline"
@@ -155,6 +164,7 @@ export function MealRegistration() {
                                             disabled={recordMeal.isPending}
                                             className="flex-1 bg-orange-500 hover:bg-orange-600"
                                         >
+                                            {recordMeal.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                                             Registrar Comida
                                         </Button>
                                     </div>

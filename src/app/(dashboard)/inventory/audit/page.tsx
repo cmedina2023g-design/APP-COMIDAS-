@@ -33,7 +33,7 @@ export default function InventoryAuditPage() {
         const val = parseFloat(value)
         setRealStocks(prev => ({
             ...prev,
-            [id]: isNaN(val) ? 0 : val
+            [id]: isNaN(val) ? 0 : Math.max(0, val)
         }))
     }
 
@@ -157,6 +157,7 @@ export default function InventoryAuditPage() {
                                                         <Input
                                                             type="number"
                                                             placeholder="0"
+                                                            min="0"
                                                             className={`text-center font-bold ${hasEntry && diff < 0 ? 'border-red-300 bg-red-50 text-red-900' : ''}`}
                                                             onChange={(e) => handleStockChange(ing.id, e.target.value)}
                                                         />

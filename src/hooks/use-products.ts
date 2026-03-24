@@ -37,7 +37,39 @@ export function useProductsWithStock() {
             })
 
             if (error) throw error
-            return data as (Product & { available_units: number })[]
+            const products = data as (Product & { available_units: number })[]
+
+            // Fetch modifiers for all products
+            const { data: modsData, error: modsErr } = await supabase
+                .from('product_modifier_groups')
+                .select(`
+                    *,
+                    modifiers:product_modifiers(
+                        *,
+                        recipes:modifier_recipes(
+                            *,
+                            ingredients(name)
+                        )
+                    )
+                `)
+                .order('order_index')
+
+            if (modsErr) throw modsErr
+
+            // Attach to products
+            return products.map(p => ({
+                ...p,
+                modifier_groups: modsData.filter(m => m.product_id === p.id).map(group => ({
+                    ...group,
+                    modifiers: group.modifiers?.map((mod: any) => ({
+                        ...mod,
+                        recipes: mod.recipes?.map((r: any) => ({
+                            ...r,
+                            ingredient_name: r.ingredients?.name
+                        }))
+                    }))
+                }))
+            }))
         }
     })
 }
@@ -57,6 +89,35 @@ export function useCategories() {
             // Extract unique categories
             const categories = Array.from(new Set(data.map(p => p.category)))
             return categories.filter(Boolean).sort() as string[]
+        }
+    })
+}
+
+// Fetches ALL recipes for ALL products in one query - used by the product list page
+export function useAllProductRecipes() {
+    const supabase = createClient()
+    return useQuery({
+        queryKey: ['all-product-recipes'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('product_recipes')
+                .select('product_id, qty, ingredient_id, ingredients(name, unit)')
+
+            if (error) throw error
+
+            // Group by product_id for easy lookup
+            const byProduct: Record<string, { ingredient_id: string, name: string, unit: string, qty: number }[]> = {}
+            for (const row of data ?? []) {
+                if (!byProduct[row.product_id]) byProduct[row.product_id] = []
+                const ing = row.ingredients as any
+                byProduct[row.product_id].push({
+                    ingredient_id: row.ingredient_id,
+                    name: ing?.name ?? '?',
+                    unit: ing?.unit ?? '',
+                    qty: row.qty
+                })
+            }
+            return byProduct
         }
     })
 }
@@ -83,9 +144,37 @@ export function useProductWithRecipes(productId: string | null) {
 
             if (recError) throw recError
 
+            // Fetch modifiers
+            const { data: modifierGroups, error: modGroupsError } = await supabase
+                .from('product_modifier_groups')
+                .select(`
+                    *,
+                    modifiers:product_modifiers(
+                        *,
+                        recipes:modifier_recipes(
+                            *,
+                            ingredients(name)
+                        )
+                    )
+                `)
+                .eq('product_id', productId)
+                .order('order_index')
+
+            if (modGroupsError) throw modGroupsError
+
             return {
                 ...product,
-                recipes: recipes.map(r => ({ ...r, ingredient_name: r.ingredients?.name }))
+                recipes: recipes.map(r => ({ ...r, ingredient_name: r.ingredients?.name })),
+                modifier_groups: modifierGroups.map(group => ({
+                    ...group,
+                    modifiers: group.modifiers?.map((mod: any) => ({
+                        ...mod,
+                        recipes: mod.recipes?.map((r: any) => ({
+                            ...r,
+                            ingredient_name: r.ingredients?.name
+                        }))
+                    }))
+                }))
             }
         },
         enabled: !!productId
@@ -99,7 +188,11 @@ export function useCreateProduct() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ product, recipes }: { product: Omit<Product, 'id' | 'organization_id' | 'created_at'>, recipes: { ingredient_id: string, qty: number }[] }) => {
+        mutationFn: async ({ product, recipes, modifier_groups }: {
+            product: Omit<Product, 'id' | 'organization_id' | 'created_at'>,
+            recipes: { ingredient_id: string, qty: number }[],
+            modifier_groups?: any[]
+        }) => {
             const { organization_id } = await getOrCreateProfile(supabase)
 
             // 1. Create Product
@@ -123,10 +216,72 @@ export function useCreateProduct() {
                 if (recError) throw recError // TODO: rollback product?
             }
 
+            // 3. Create Modifiers
+            if (modifier_groups && modifier_groups.length > 0) {
+                for (let i = 0; i < modifier_groups.length; i++) {
+                    const group = modifier_groups[i]
+                    // Create group
+                    const { data: groupData, error: groupErr } = await supabase
+                        .from('product_modifier_groups')
+                        .insert({
+                            product_id: newDist.id,
+                            name: group.name,
+                            min_selections: group.min_selections,
+                            max_selections: group.max_selections,
+                            order_index: i
+                        })
+                        .select()
+                        .single()
+
+                    if (groupErr) {
+                        console.error('Error creating modifier group:', groupErr)
+                        throw groupErr
+                    }
+
+                    // Create modifiers for group
+                    if (group.modifiers && group.modifiers.length > 0) {
+                        for (let j = 0; j < group.modifiers.length; j++) {
+                            const mod = group.modifiers[j]
+                            const { data: modData, error: modErr } = await supabase
+                                .from('product_modifiers')
+                                .insert({
+                                    group_id: groupData.id,
+                                    name: mod.name,
+                                    extra_price: mod.extra_price || 0,
+                                    order_index: j
+                                })
+                                .select()
+                                .single()
+
+                            if (modErr) {
+                                console.error('Error creating product modifier:', modErr)
+                                throw modErr
+                            }
+
+                            const validRecipes = mod.recipes.filter((mr: any) => mr.ingredient_id && mr.ingredient_id !== '')
+                            if (validRecipes.length > 0) {
+                                const modRecipeRows = validRecipes.map((mr: any) => ({
+                                    modifier_id: modData.id,
+                                    ingredient_id: mr.ingredient_id,
+                                    qty: mr.qty || 0
+                                }))
+                                const { error: mrErr } = await supabase.from('modifier_recipes').insert(modRecipeRows)
+                                if (mrErr) {
+                                    console.error('Error creating modifier recipe:', mrErr)
+                                    throw mrErr
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             return newDist
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] })
+            queryClient.invalidateQueries({ queryKey: ['products-with-stock'] })
+            queryClient.invalidateQueries({ queryKey: ['all-product-recipes'] })
             toast.success('Producto creado')
         },
         onError: (err: any) => {
@@ -140,7 +295,12 @@ export function useUpdateProduct() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ id, product, recipes }: { id: string, product: Partial<Product>, recipes?: { ingredient_id: string, qty: number }[] }) => {
+        mutationFn: async ({ id, product, recipes, modifier_groups }: {
+            id: string,
+            product: Partial<Product>,
+            recipes?: { ingredient_id: string, qty: number }[],
+            modifier_groups?: any[]
+        }) => {
             const { error: prodError } = await supabase.from('products').update(product).eq('id', id)
             if (prodError) throw prodError
 
@@ -160,9 +320,80 @@ export function useUpdateProduct() {
                     await supabase.from('product_recipes').insert(recipeRows)
                 }
             }
+
+            // Always recreate modifiers on update to handle complex changes easily
+            // Note: In a production heavily-used system, diffing might be better, but delete+reinsert is safer for now.
+            // But we can only do this if modifier_groups is explicitly passed in the update payload.
+            if (modifier_groups) {
+                // Delete old groups (cascades to modifiers and recipes)
+                await supabase.from('product_modifier_groups').delete().eq('product_id', id)
+
+                if (modifier_groups.length > 0) {
+                    for (let i = 0; i < modifier_groups.length; i++) {
+                        const group = modifier_groups[i]
+                        // Create group
+                        const { data: groupData, error: groupErr } = await supabase
+                            .from('product_modifier_groups')
+                            .insert({
+                                product_id: id,
+                                name: group.name,
+                                min_selections: group.min_selections,
+                                max_selections: group.max_selections,
+                                order_index: i
+                            })
+                            .select()
+                            .single()
+
+                        if (groupErr) {
+                            console.error('Error creating modifier group (Update):', groupErr)
+                            throw groupErr
+                        }
+
+                        // Create modifiers for group
+                        if (group.modifiers && group.modifiers.length > 0) {
+                            for (let j = 0; j < group.modifiers.length; j++) {
+                                const mod = group.modifiers[j]
+                                const { data: modData, error: modErr } = await supabase
+                                    .from('product_modifiers')
+                                    .insert({
+                                        group_id: groupData.id,
+                                        name: mod.name,
+                                        extra_price: mod.extra_price || 0,
+                                        order_index: j
+                                    })
+                                    .select()
+                                    .single()
+
+                                if (modErr) {
+                                    console.error('Error creating product modifier (Update):', modErr)
+                                    throw modErr
+                                }
+
+                                // Create modifier recipes
+                                const validRecipes = mod.recipes ? mod.recipes.filter((mr: any) => mr.ingredient_id && mr.ingredient_id !== '') : []
+                                if (validRecipes.length > 0) {
+                                    const modRecipeRows = validRecipes.map((mr: any) => ({
+                                        modifier_id: modData.id,
+                                        ingredient_id: mr.ingredient_id,
+                                        qty: mr.qty || 0
+                                    }))
+                                    const { error: mrErr } = await supabase.from('modifier_recipes').insert(modRecipeRows)
+                                    if (mrErr) {
+                                        console.error('Error creating modifier recipe (Update):', mrErr)
+                                        throw mrErr
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         },
-        onSuccess: () => {
+        onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ['products'] })
+            queryClient.invalidateQueries({ queryKey: ['products-with-stock'] })
+            queryClient.invalidateQueries({ queryKey: ['all-product-recipes'] })
+            queryClient.invalidateQueries({ queryKey: ['product', variables.id] })
             toast.success('Producto actualizado')
         },
         onError: (err: any) => {
@@ -179,8 +410,11 @@ export function useDeleteProduct() {
             const { error } = await supabase.from('products').delete().eq('id', id)
             if (error) throw error
         },
-        onSuccess: () => {
+        onSuccess: (_, id) => {
             queryClient.invalidateQueries({ queryKey: ['products'] })
+            queryClient.invalidateQueries({ queryKey: ['products-with-stock'] })
+            queryClient.invalidateQueries({ queryKey: ['all-product-recipes'] })
+            queryClient.invalidateQueries({ queryKey: ['product', id] })
             toast.success('Producto eliminado')
         }
     })

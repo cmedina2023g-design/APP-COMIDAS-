@@ -74,7 +74,7 @@ export function useMarkAllRead() {
                 .from('notifications')
                 .update({ read: true })
                 .eq('organization_id', organization_id)
-                .is('read', false)
+                .eq('read', false)
 
             if (error) throw error
         },

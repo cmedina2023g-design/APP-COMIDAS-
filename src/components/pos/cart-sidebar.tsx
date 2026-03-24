@@ -40,8 +40,8 @@ export function CartSidebar() {
     }
 
     const handleCheckout = async () => {
-        if (remainingAmount !== 0) {
-            toast.error('El total de pagos debe ser igual al total de la venta')
+        if (remainingAmount > 0) {
+            toast.error('El total de pagos no cubre el total de la venta')
             return
         }
         if (payments.length === 0) {
@@ -74,7 +74,10 @@ export function CartSidebar() {
             <Card className="h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in">
                 <CheckCircle2 className="h-16 w-16 text-green-500 mb-4" />
                 <h2 className="text-2xl font-bold mb-2">¡Venta Exitosa!</h2>
-                <p className="text-muted-foreground mb-6">Total: ${successData.total.toLocaleString()}</p>
+                <p className="text-muted-foreground mb-1">Total: ${successData.total.toLocaleString()}</p>
+                <p className="text-xs font-mono text-slate-400 mb-6">
+                    Venta #{successData.id.slice(0, 8).toUpperCase()}
+                </p>
                 <Button className="w-full" size="lg" onClick={handleNewSale}>Nueva Venta</Button>
             </Card>
         )
@@ -144,10 +147,10 @@ export function CartSidebar() {
                     {/* Remaining amount indicator */}
                     {payments.length > 0 && (
                         <div className={`flex justify-between text-sm font-bold mb-3 p-2 rounded-lg ${remainingAmount === 0 ? 'bg-green-50 text-green-700' :
-                            remainingAmount > 0 ? 'bg-orange-50 text-orange-700' : 'bg-red-50 text-red-700'
+                            remainingAmount > 0 ? 'bg-orange-50 text-orange-700' : 'bg-green-50 text-green-700'
                             }`}>
-                            <span>Restante</span>
-                            <span>${remainingAmount.toLocaleString()}</span>
+                            <span>{remainingAmount < 0 ? 'Cambio' : 'Restante'}</span>
+                            <span>${Math.abs(remainingAmount).toLocaleString()}</span>
                         </div>
                     )}
 
@@ -167,17 +170,31 @@ export function CartSidebar() {
                     </div>
                 </div>
 
-                <Button
-                    className="w-full bg-green-600 hover:bg-green-700 text-lg py-6"
-                    disabled={items.length === 0 || remainingAmount !== 0 || payments.length === 0 || createSaleMutation.isPending}
-                    onClick={handleCheckout}
-                >
-                    {createSaleMutation.isPending ? (
-                        <Loader2 className="animate-spin h-6 w-6" />
-                    ) : (
-                        'Cobrar'
-                    )}
-                </Button>
+                {(() => {
+                    const isCheckoutDisabled = items.length === 0 || remainingAmount > 0 || payments.length === 0 || createSaleMutation.isPending
+                    return (
+                        <>
+                            <Button
+                                className="w-full bg-green-600 hover:bg-green-700 text-lg py-6"
+                                disabled={isCheckoutDisabled}
+                                onClick={handleCheckout}
+                            >
+                                {createSaleMutation.isPending ? (
+                                    <Loader2 className="animate-spin h-6 w-6" />
+                                ) : (
+                                    'Cobrar'
+                                )}
+                            </Button>
+                            {isCheckoutDisabled && !createSaleMutation.isPending && (
+                                <p className="text-xs text-center text-slate-400 mt-1">
+                                    {items.length === 0 ? 'Agrega productos al pedido'
+                                        : payments.length === 0 ? 'Selecciona un método de pago'
+                                            : `Falta: $${remainingAmount.toLocaleString()}`}
+                                </p>
+                            )}
+                        </>
+                    )
+                })()}
             </CardFooter>
         </Card>
     )
@@ -191,7 +208,7 @@ function CartItemRow({ item }: { item: any }) {
     const handleSavePrice = () => {
         const newPrice = Number(priceInput)
         if (!isNaN(newPrice) && newPrice >= 0) {
-            updatePrice(item.id, newPrice)
+            updatePrice(item.cartItemId || item.id, newPrice)
             setIsEditingPrice(false)
         }
     }
@@ -200,6 +217,17 @@ function CartItemRow({ item }: { item: any }) {
         <div className="flex gap-2 items-start bg-slate-50 p-2 rounded-lg">
             <div className="flex-1">
                 <p className="font-medium text-sm leading-tight">{item.name}</p>
+
+                {item.modifiers && item.modifiers.length > 0 && (
+                    <ul className="text-xs text-muted-foreground mt-1 space-y-0.5 ml-1">
+                        {item.modifiers.map((mod: any, i: number) => (
+                            <li key={i} className="flex justify-between">
+                                <span>- {mod.name}</span>
+                                {mod.extra_price > 0 && <span>+${mod.extra_price.toLocaleString()}</span>}
+                            </li>
+                        ))}
+                    </ul>
+                )}
 
                 <Popover open={isEditingPrice} onOpenChange={setIsEditingPrice}>
                     <PopoverTrigger asChild>
@@ -227,9 +255,9 @@ function CartItemRow({ item }: { item: any }) {
             </div>
             <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-2 bg-white rounded-md border shadow-sm">
-                    <button className="p-1 hover:bg-slate-100" onClick={() => updateQty(item.id, item.qty - 1)}><Minus className="h-3 w-3" /></button>
+                    <button className="p-1 hover:bg-slate-100" onClick={() => updateQty(item.cartItemId || item.id, item.qty - 1)}><Minus className="h-3 w-3" /></button>
                     <span className="text-sm w-4 text-center font-bold">{item.qty}</span>
-                    <button className="p-1 hover:bg-slate-100" onClick={() => updateQty(item.id, item.qty + 1)}><Plus className="h-3 w-3" /></button>
+                    <button className="p-1 hover:bg-slate-100" onClick={() => updateQty(item.cartItemId || item.id, item.qty + 1)}><Plus className="h-3 w-3" /></button>
                 </div>
                 <div className="text-sm font-bold">
                     ${(item.price * item.qty).toLocaleString()}

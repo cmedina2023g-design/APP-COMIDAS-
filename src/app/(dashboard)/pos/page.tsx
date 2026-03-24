@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { MealRegistration } from '@/components/employee/meal-registration'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useCartStore } from '@/lib/store/cart'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function POSPage() {
     const { data: products, isLoading } = useProductsWithStock()
@@ -179,7 +180,14 @@ export default function POSPage() {
 
                     <ScrollArea className="flex-1 -mx-2 px-2 md:mx-0 md:px-0">
                         {isLoading ? (
-                            <div className="flex justify-center py-20">Cargando productos...</div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                {Array.from({ length: 8 }).map((_, i) => (
+                                    <div key={i} className="bg-white rounded-xl border border-slate-200 p-4">
+                                        <Skeleton className="h-4 w-3/4 mb-2" />
+                                        <Skeleton className="h-6 w-1/3" />
+                                    </div>
+                                ))}
+                            </div>
                         ) : (
                             <ProductGrid products={filteredProducts} />
                         )}

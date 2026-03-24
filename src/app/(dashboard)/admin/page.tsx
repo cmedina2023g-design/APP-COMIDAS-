@@ -363,17 +363,12 @@ function InventoryItem({ item }: { item: any }) {
     const returnInventory = useReturnInventory()
 
     const assignedQty = item.assigned_qty || 0
-    const currentReturn = parseInt(returnQty) || 0
-    // Check if the RETURNED qty exceeds ASSIGNED.
-    // NOTE: This logic assumes 'returnQty' is the TOTAL amount being returned now. 
-    // If the system supported incremental returns, we'd need (item.returned_qty + currentReturn) > assignedQty.
-    // Based on user feedback ("returned 20, assigned 3"), it seems they entered 20 in this input.
-    // We will cap it at assignedQty.
-    const isOverLimit = currentReturn > assignedQty
-    const isInvalid = isOverLimit || currentReturn < 0
+    const currentReturn = returnQty === '' ? null : parseInt(returnQty, 10)
+    const isOverLimit = currentReturn !== null && !Number.isNaN(currentReturn) && currentReturn > assignedQty
+    const isInvalid = currentReturn === null || Number.isNaN(currentReturn) || currentReturn < 0 || isOverLimit
 
     const handleReturn = () => {
-        if (isInvalid) return
+        if (isInvalid || currentReturn === null || Number.isNaN(currentReturn)) return
 
         returnInventory.mutate({
             assignment_id: item.id,
@@ -391,7 +386,7 @@ function InventoryItem({ item }: { item: any }) {
         return new Date(dateStr).toLocaleTimeString('es-CO', {
             hour: '2-digit',
             minute: '2-digit',
-            hour12: true
+            hour12: false
         })
     }
 

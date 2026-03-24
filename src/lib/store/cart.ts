@@ -4,11 +4,13 @@ import { Product } from '@/lib/types'
 
 export interface CartItem extends Product {
     qty: number
+    cartItemId: string // Unique identifier for the cart instance (product.id + modifiers signature)
+    modifiers?: any[]
 }
 
 interface CartState {
     items: CartItem[]
-    addItem: (product: Product) => void
+    addItem: (product: Product, modifiers?: any[]) => void
     removeItem: (productId: string) => void
     updateQty: (productId: string, qty: number) => void
     updatePrice: (productId: string, price: number) => void
@@ -21,37 +23,58 @@ export const useCartStore = create<CartState>()(
         (set, get) => ({
             items: [],
             // ... (keep existing addItem)
-            addItem: (product) => {
+            addItem: (product, modifiers = []) => {
                 const items = get().items
-                const existing = items.find((i) => i.id === product.id)
-                if (existing) {
-                    set({
-                        items: items.map((i) =>
-                            i.id === product.id ? { ...i, qty: i.qty + 1 } : i
-                        ),
-                    })
+
+                // Calculate total price with modifiers
+                let itemPrice = product.price
+                modifiers.forEach(m => {
+                    itemPrice += (m.extra_price || 0)
+                })
+
+                // Create a unique signature based on selected modifiers to group identical items
+                const modifiersSignature = modifiers.map(m => m.modifier_id).sort().join(',')
+                const cartItemId = `${product.id}-${modifiersSignature}`
+
+                const existingItemIndex = items.findIndex((i) => i.cartItemId === cartItemId)
+
+                if (existingItemIndex !== -1) {
+                    const newItems = [...items]
+                    newItems[existingItemIndex] = {
+                        ...newItems[existingItemIndex],
+                        qty: newItems[existingItemIndex].qty + 1
+                    }
+                    set({ items: newItems })
                 } else {
-                    set({ items: [...items, { ...product, qty: 1 }] })
+                    set({
+                        items: [...items, {
+                            ...product,
+                            qty: 1,
+                            price: itemPrice, // Base price + modifiers
+                            cartItemId,
+                            modifiers
+                        }]
+                    })
                 }
             },
-            removeItem: (productId) => {
-                set({ items: get().items.filter((i) => i.id !== productId) })
+            removeItem: (cartItemId) => {
+                set({ items: get().items.filter((i) => i.cartItemId !== cartItemId) })
             },
-            updateQty: (productId, qty) => {
+            updateQty: (cartItemId, qty) => {
                 if (qty <= 0) {
-                    get().removeItem(productId)
+                    get().removeItem(cartItemId)
                     return
                 }
                 set({
                     items: get().items.map((i) =>
-                        i.id === productId ? { ...i, qty } : i
+                        i.cartItemId === cartItemId ? { ...i, qty } : i
                     ),
                 })
             },
-            updatePrice: (productId, price) => {
+            updatePrice: (cartItemId, price) => {
                 set({
                     items: get().items.map((i) =>
-                        i.id === productId ? { ...i, price } : i
+                        i.cartItemId === cartItemId ? { ...i, price } : i
                     ),
                 })
             },

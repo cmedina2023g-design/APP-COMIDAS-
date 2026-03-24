@@ -1,12 +1,12 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useProducts, useDeleteProduct } from '@/hooks/use-products'
+import { useProducts, useDeleteProduct, useAllProductRecipes } from '@/hooks/use-products'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Search, Edit, Trash2 } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, FlaskConical } from 'lucide-react'
 import { ProductDialog } from '@/components/products/product-dialog'
 import { Product } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +14,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 
 export default function ProductsPage() {
     const { data: products, isLoading, error } = useProducts()
+    const { data: allRecipes } = useAllProductRecipes()
     const deleteMutation = useDeleteProduct()
 
     const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -95,30 +96,70 @@ export default function ProductsPage() {
                                             <Table>
                                                 <TableHeader>
                                                     <TableRow>
-                                                        <TableHead className="w-[40%]">Nombre</TableHead>
+                                                        <TableHead className="w-[25%]">Nombre</TableHead>
                                                         <TableHead>Precio</TableHead>
                                                         <TableHead>Estado</TableHead>
+                                                        <TableHead className="w-[40%]">
+                                                            <div className="flex items-center gap-1">
+                                                                <FlaskConical className="h-4 w-4 text-blue-500" />
+                                                                Receta
+                                                            </div>
+                                                        </TableHead>
                                                         <TableHead className="text-right">Acciones</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
-                                                    {productList.map((prod) => (
-                                                        <TableRow key={prod.id}>
-                                                            <TableCell className="font-medium">{prod.name}</TableCell>
-                                                            <TableCell>${prod.price.toLocaleString()}</TableCell>
-                                                            <TableCell>
-                                                                {prod.active ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Activo</Badge> : <Badge variant="secondary">Inactivo</Badge>}
+                                                    {productList.map((prod) => {
+                                                        const recipe = allRecipes?.[prod.id] ?? []
+                                                        return (
+                                                            <TableRow key={prod.id}>
+                                                                <TableCell className="font-medium">
+                                                                <div className="flex items-center gap-2">
+                                                                    {prod.name}
+                                                                    {(allRecipes?.[prod.id] ?? []).length === 0 && prod.active && (
+                                                                        <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-300">
+                                                                            Sin receta
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
                                                             </TableCell>
-                                                            <TableCell className="text-right flex justify-end gap-2">
-                                                                <Button variant="ghost" size="icon" onClick={() => handleEdit(prod)}>
-                                                                    <Edit className="h-4 w-4 text-blue-600" />
-                                                                </Button>
-                                                                <Button variant="ghost" size="icon" onClick={() => handleDelete(prod.id)}>
-                                                                    <Trash2 className="h-4 w-4 text-red-600" />
-                                                                </Button>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
+                                                                <TableCell>${prod.price.toLocaleString()}</TableCell>
+                                                                <TableCell>
+                                                                    {prod.active
+                                                                        ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Activo</Badge>
+                                                                        : <Badge variant="secondary">Inactivo</Badge>
+                                                                    }
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    {recipe.length === 0 ? (
+                                                                        <span className="text-xs text-muted-foreground italic">Sin receta</span>
+                                                                    ) : (
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {recipe.map((ing, i) => (
+                                                                                <span
+                                                                                    key={i}
+                                                                                    className="inline-flex items-center gap-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-full px-2 py-0.5 text-xs font-medium"
+                                                                                >
+                                                                                    {ing.name}
+                                                                                    <span className="text-blue-500 font-bold">{ing.qty}{ing.unit}</span>
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    <div className="flex justify-end gap-2">
+                                                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(prod)}>
+                                                                            <Edit className="h-4 w-4 text-blue-600" />
+                                                                        </Button>
+                                                                        <Button variant="ghost" size="icon" onClick={() => handleDelete(prod.id)}>
+                                                                            <Trash2 className="h-4 w-4 text-red-600" />
+                                                                        </Button>
+                                                                    </div>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )
+                                                    })}
                                                 </TableBody>
                                             </Table>
                                         </AccordionContent>

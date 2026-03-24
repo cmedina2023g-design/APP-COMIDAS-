@@ -18,7 +18,8 @@ import {
     Calendar as CalendarIcon,
     Shield,
     CreditCard,
-    Truck
+    Truck,
+    Loader2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
@@ -27,6 +28,7 @@ import { toast } from 'sonner'
 import { useCurrentProfile } from '@/hooks/use-profiles'
 import { useSessionMonitor } from '@/hooks/use-sessions'
 import { NotificationBell } from '@/components/common/notification-bell'
+import { useCartStore } from '@/lib/store/cart'
 
 const sidebarItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
@@ -37,6 +39,7 @@ const sidebarItems = [
     { name: 'Gastos', href: '/expenses', icon: DollarSign, roles: ['ADMIN', 'SELLER'] },
     { name: 'Corredores', href: '/corredores', icon: Truck, roles: ['ADMIN', 'SELLER'] },
     { name: 'Cartera', href: '/admin/finance/receivables', icon: CreditCard, roles: ['ADMIN'] },
+    { name: 'Hist. Ventas', href: '/admin/sales', icon: FileSpreadsheet, roles: ['ADMIN'] },
     { name: 'Reportes', href: '/reports', icon: BarChart3, roles: ['ADMIN'] },
     { name: 'Admin', href: '/admin', icon: Shield, roles: ['ADMIN'] },
     { name: 'Configuración', href: '/settings', icon: Settings, roles: ['ADMIN'] },
@@ -47,7 +50,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const router = useRouter()
     const supabase = createClient()
-    const { data: currentProfile } = useCurrentProfile()
+    const { data: currentProfile, isLoading: isProfileLoading } = useCurrentProfile()
+    const clearCart = useCartStore(state => state.clearCart)
     useSessionMonitor()
 
     // Role-based route guard: redirect to /pos if user navigates to a page they don't have access to
@@ -62,9 +66,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             router.push('/pos')
         }
     }, [currentProfile, pathname, router])
-
-    // Check if we're on POS page
-    const isPOSPage = pathname === '/pos'
 
     // Listen for hash changes to toggle sidebar on POS page
     React.useEffect(() => {
@@ -81,7 +82,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return () => window.removeEventListener('hashchange', handleHashChange)
     }, [])
 
+    if (isProfileLoading) {
+        return (
+            <div className="flex min-h-screen items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+            </div>
+        )
+    }
+
+    // Check if we're on POS page
+    const isPOSPage = pathname === '/pos'
+
     const handleLogout = async () => {
+        // Clear cart so next user doesn't see previous user's items
+        clearCart()
+
         // Close user session in database
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
@@ -175,6 +190,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                     {/* Footer / User */}
                     <div className="p-4 border-t border-slate-800">
+                        {currentProfile && (
+                            <div className="mb-3 px-2 py-2 bg-slate-900 rounded-md">
+                                <p className="text-sm font-semibold text-white truncate">{currentProfile.full_name}</p>
+                                <span className="text-xs px-1.5 py-0.5 bg-blue-700 rounded text-blue-100 font-medium">
+                                    {currentProfile.role === 'ADMIN' ? 'Administrador' : currentProfile.role === 'SELLER' ? 'Vendedor' : 'Corredor'}
+                                </span>
+                            </div>
+                        )}
                         <Button
                             variant="ghost"
                             className="w-full justify-start text-slate-400 hover:text-red-400 hover:bg-slate-900"
