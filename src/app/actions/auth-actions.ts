@@ -70,3 +70,46 @@ export async function createEmployeeUser(prevState: any, formData: FormData) {
         return { error: error.message || 'Error al crear usuario' }
     }
 }
+
+export async function deleteEmployeeUser(userId: string) {
+    if (!userId) return { error: 'ID de usuario requerido' }
+
+    try {
+        const supabaseAdmin = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            { auth: { autoRefreshToken: false, persistSession: false } }
+        )
+
+        // Delete from profiles first (in case FK doesn't cascade)
+        await supabaseAdmin.from('profiles').delete().eq('id', userId)
+
+        // Delete from Supabase Auth
+        const { error } = await supabaseAdmin.auth.admin.deleteUser(userId)
+        if (error) throw error
+
+        return { success: true }
+    } catch (error: any) {
+        return { error: error.message || 'Error al eliminar usuario' }
+    }
+}
+
+export async function changeEmployeePassword(userId: string, newPassword: string) {
+    if (!userId) return { error: 'ID de usuario requerido' }
+    if (!newPassword || newPassword.length < 6) return { error: 'La contraseña debe tener al menos 6 caracteres' }
+
+    try {
+        const supabaseAdmin = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            { auth: { autoRefreshToken: false, persistSession: false } }
+        )
+
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: newPassword })
+        if (error) throw error
+
+        return { success: true }
+    } catch (error: any) {
+        return { error: error.message || 'Error al cambiar contraseña' }
+    }
+}

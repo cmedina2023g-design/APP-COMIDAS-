@@ -7,15 +7,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Switch } from '@/components/ui/switch'
-import { Trash2, Plus, Loader2 } from 'lucide-react'
+import { Trash2, Plus, Loader2, KeyRound } from 'lucide-react'
 import { useShifts, useUpdateShift } from '@/hooks/use-sessions'
 import { usePaymentMethods, useCreatePaymentMethod, useTogglePaymentMethod, useDeletePaymentMethod } from '@/hooks/use-settings'
 import { useProfiles, useUpdateProfileRole, useToggleProfileActive, UserRole } from '@/hooks/use-profiles'
-import { createEmployeeUser } from '@/app/actions/auth-actions'
+import { useCurrentProfile } from '@/hooks/use-profiles'
+import { createEmployeeUser, deleteEmployeeUser, changeEmployeePassword } from '@/app/actions/auth-actions'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 function CreateUserForm({ organizationId }: { organizationId?: string }) {
     const [loading, setLoading] = useState(false)
@@ -156,6 +158,8 @@ function ShiftSettings() {
 export default function SettingsPage() {
     const { data: methods, isLoading } = usePaymentMethods()
     const { data: profiles } = useProfiles()
+    const { data: currentProfile } = useCurrentProfile()
+    const queryClient = useQueryClient()
 
     const createMutation = useCreatePaymentMethod()
     const toggleMutation = useTogglePaymentMethod()
@@ -164,6 +168,43 @@ export default function SettingsPage() {
     const toggleActiveMutation = useToggleProfileActive()
 
     const [newName, setNewName] = useState('')
+
+    // Delete user state
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+    const [deleteLoading, setDeleteLoading] = useState(false)
+
+    // Change password state
+    const [pwTarget, setPwTarget] = useState<{ id: string; name: string } | null>(null)
+    const [newPassword, setNewPassword] = useState('')
+    const [pwLoading, setPwLoading] = useState(false)
+
+    const handleDeleteUser = async () => {
+        if (!deleteTarget) return
+        setDeleteLoading(true)
+        const result = await deleteEmployeeUser(deleteTarget.id)
+        setDeleteLoading(false)
+        if (result.error) {
+            toast.error(result.error)
+        } else {
+            toast.success(`Usuario "${deleteTarget.name}" eliminado`)
+            queryClient.invalidateQueries({ queryKey: ['profiles'] })
+            setDeleteTarget(null)
+        }
+    }
+
+    const handleChangePassword = async () => {
+        if (!pwTarget) return
+        setPwLoading(true)
+        const result = await changeEmployeePassword(pwTarget.id, newPassword)
+        setPwLoading(false)
+        if (result.error) {
+            toast.error(result.error)
+        } else {
+            toast.success(`Contraseña de "${pwTarget.name}" actualizada`)
+            setPwTarget(null)
+            setNewPassword('')
+        }
+    }
 
     const handleCreateMethod = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -253,9 +294,10 @@ export default function SettingsPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Nombre / Email (ID)</TableHead>
+                                            <TableHead>Nombre</TableHead>
                                             <TableHead>Rol</TableHead>
                                             <TableHead>Estado</TableHead>
+                                            <TableHead className="text-right">Acciones</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -263,7 +305,6 @@ export default function SettingsPage() {
                                             <TableRow key={profile.id}>
                                                 <TableCell className="font-medium">
                                                     {profile.full_name || profile.id}
-                                                    <div className="text-xs text-muted-foreground">{profile.id}</div>
                                                 </TableCell>
                                                 <TableCell>
                                                     <Select
@@ -291,6 +332,28 @@ export default function SettingsPage() {
                                                         {profile.active ? 'Activo' : 'Inactivo'}
                                                     </Button>
                                                 </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex justify-end gap-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            title="Cambiar contraseña"
+                                                            onClick={() => { setPwTarget({ id: profile.id, name: profile.full_name || profile.id }); setNewPassword('') }}
+                                                        >
+                                                            <KeyRound className="h-4 w-4 text-slate-500" />
+                                                        </Button>
+                                                        {profile.id !== currentProfile?.id && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                title="Eliminar usuario"
+                                                                onClick={() => setDeleteTarget({ id: profile.id, name: profile.full_name || profile.id })}
+                                                            >
+                                                                <Trash2 className="h-4 w-4 text-red-500" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
@@ -300,6 +363,51 @@ export default function SettingsPage() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* Delete user dialog */}
+            <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Eliminar usuario</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                        ¿Estás seguro de eliminar a <span className="font-semibold text-foreground">{deleteTarget?.name}</span>? Esta acción no se puede deshacer.
+                    </p>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>Cancelar</Button>
+                        <Button variant="destructive" onClick={handleDeleteUser} disabled={deleteLoading}>
+                            {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                            Eliminar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Change password dialog */}
+            <Dialog open={!!pwTarget} onOpenChange={(open) => { if (!open) { setPwTarget(null); setNewPassword('') } }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Cambiar contraseña</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground mb-2">
+                        Nueva contraseña para <span className="font-semibold text-foreground">{pwTarget?.name}</span>
+                    </p>
+                    <Input
+                        type="password"
+                        placeholder="Nueva contraseña (mín. 6 caracteres)"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        minLength={6}
+                    />
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => { setPwTarget(null); setNewPassword('') }} disabled={pwLoading}>Cancelar</Button>
+                        <Button onClick={handleChangePassword} disabled={pwLoading || newPassword.length < 6}>
+                            {pwLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                            Guardar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
