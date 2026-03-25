@@ -12,7 +12,7 @@ import { useShifts, useUpdateShift } from '@/hooks/use-sessions'
 import { usePaymentMethods, useCreatePaymentMethod, useTogglePaymentMethod, useDeletePaymentMethod } from '@/hooks/use-settings'
 import { useProfiles, useUpdateProfileRole, useToggleProfileActive, UserRole } from '@/hooks/use-profiles'
 import { useCurrentProfile } from '@/hooks/use-profiles'
-import { createEmployeeUser, deleteEmployeeUser, changeEmployeePassword } from '@/app/actions/auth-actions'
+import { createEmployeeUser, deleteEmployeeUser, changeEmployeePassword, getEmployeeUsernames } from '@/app/actions/auth-actions'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -169,6 +169,16 @@ export default function SettingsPage() {
 
     const [newName, setNewName] = useState('')
 
+    // Usernames from auth
+    const [usernameMap, setUsernameMap] = useState<Record<string, string>>({})
+    useEffect(() => {
+        getEmployeeUsernames().then(list => {
+            const map: Record<string, string> = {}
+            list.forEach(u => { map[u.id] = u.username })
+            setUsernameMap(map)
+        })
+    }, [profiles])
+
     // Delete user state
     const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
@@ -305,6 +315,11 @@ export default function SettingsPage() {
                                             <TableRow key={profile.id}>
                                                 <TableCell className="font-medium">
                                                     {profile.full_name || profile.id}
+                                                    {usernameMap[profile.id] && (
+                                                        <div className="text-xs text-muted-foreground font-mono">
+                                                            @{usernameMap[profile.id]}
+                                                        </div>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell>
                                                     <Select

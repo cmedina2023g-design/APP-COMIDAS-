@@ -71,6 +71,24 @@ export async function createEmployeeUser(prevState: any, formData: FormData) {
     }
 }
 
+export async function getEmployeeUsernames(): Promise<{ id: string; username: string }[]> {
+    try {
+        const supabaseAdmin = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            { auth: { autoRefreshToken: false, persistSession: false } }
+        )
+        const { data, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 })
+        if (error) return []
+        return data.users.map(u => ({
+            id: u.id,
+            username: (u.user_metadata?.username as string) || u.email?.replace('@pos.local', '') || ''
+        }))
+    } catch {
+        return []
+    }
+}
+
 export async function deleteEmployeeUser(userId: string) {
     if (!userId) return { error: 'ID de usuario requerido' }
 
