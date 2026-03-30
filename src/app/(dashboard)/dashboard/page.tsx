@@ -7,13 +7,14 @@ import { DollarSign, CreditCard, ShoppingBag, AlertTriangle, ArrowUpRight, Arrow
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { useShiftSales, useShiftPaymentMethods, useRunnerPaymentMethods, useShifts } from '@/hooks/use-sessions'
-import { useRunnerSales } from '@/hooks/use-reports'
+import { useRunnerSales, useRunnerSaleDetails } from '@/hooks/use-reports'
+import { format, startOfDay, endOfDay } from 'date-fns'
 import { useAllEmployeesSummary } from '@/hooks/use-employee-meals'
 import { formatCurrency } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-
-import { startOfDay, endOfDay } from 'date-fns'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 export default function DashboardPage() {
     const { data: stats, isLoading } = useDashboardStats()
@@ -24,6 +25,12 @@ export default function DashboardPage() {
     const { data: runnerPaymentMethods } = useRunnerPaymentMethods(startOfDay(today), endOfDay(today))
     const { data: shifts } = useShifts()
     const [mealsDate, setMealsDate] = useState(new Date().toISOString().split('T')[0])
+    const [selectedRunner, setSelectedRunner] = useState<{ id: string; name: string } | null>(null)
+    const { data: runnerSaleDetails, isLoading: isLoadingDetails } = useRunnerSaleDetails(
+        selectedRunner?.id ?? null,
+        startOfDay(today),
+        endOfDay(today)
+    )
     const { data: employeeMeals = [] } = useAllEmployeesSummary(mealsDate)
 
     // Get time for display
@@ -69,8 +76,9 @@ export default function DashboardPage() {
     ]
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+        <>
+            <div className="space-y-6">
+                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
                     <p className="text-muted-foreground">Resumen de actividad del día.</p>
@@ -226,12 +234,17 @@ export default function DashboardPage() {
                     <h3 className="text-lg font-semibold mb-3">Ventas por Corredor (Hoy)</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {runnerSales.map((runner: any, i: number) => (
-                            <Card key={i} className="border-t-4 border-t-blue-500">
+                            <Card
+                                key={i}
+                                className="border-t-4 border-t-blue-500 cursor-pointer hover:shadow-md transition-shadow hover:border-t-blue-600"
+                                onClick={() => setSelectedRunner({ id: runner.runner_id ?? '', name: runner.runner_name })}
+                            >
                                 <CardContent className="pt-4">
                                     <div className="flex justify-between items-center mb-2">
                                         <div className="flex items-center gap-2">
                                             <UserCircle className="h-5 w-5 text-blue-500" />
                                             <span className="font-medium">{runner.runner_name}</span>
+                                            <span className="text-[10px] text-blue-400 font-semibold">VER DETALLE →</span>
                                         </div>
                                         <div className="text-right">
                                             <p className="font-bold text-lg">${parseFloat(runner.total_sales).toLocaleString()}</p>
@@ -436,5 +449,79 @@ export default function DashboardPage() {
                 </Card>
             </div>
         </div>
+
+        {/* Runner Detail Sheet */}
+        <Sheet open={!!selectedRunner} onOpenChange={(open) => !open && setSelectedRunner(null)}>
+            <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col p-0">
+                <SheetHeader className="px-6 pt-6 pb-4 border-b">
+                    <SheetTitle className="flex items-center gap-2">
+                        <UserCircle className="h-5 w-5 text-blue-500" />
+                        {selectedRunner?.name} — Ventas de Hoy
+                    </SheetTitle>
+                    <SheetDescription>
+                        Registro completo de cada transacción del día.
+                    </SheetDescription>
+                </SheetHeader>
+
+                <ScrollArea className="flex-1 px-6">
+                    {isLoadingDetails ? (
+                        <div className="text-center py-10 text-slate-400">Cargando ventas...</div>
+                    ) : !runnerSaleDetails || runnerSaleDetails.length === 0 ? (
+                        <div className="text-center py-10 text-slate-400">Sin ventas registradas hoy.</div>
+                    ) : (
+                        <div className="space-y-4 py-4">
+                            {runnerSaleDetails.map((sale, i) => (
+                                <div key={sale.id} className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                                    {/* Sale header */}
+                                    <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-slate-100">
+                                        <div>
+                                            <span className="font-mono text-sm font-bold text-blue-600">
+                                                {format(new Date(sale.created_at), 'hh:mm a')}
+                                            </span>
+                                            <span className="ml-2 text-xs text-slate-400">
+                                                #{i + 1}
+                                            </span>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-bold text-slate-900">${sale.total.toLocaleString()}</div>
+                                            <Badge variant="outline" className="text-[10px] font-semibold">
+                                                {sale.payment_method}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                    {/* Sale items */}
+                                    <div className="px-4 py-2 space-y-1">
+                                        {sale.items.map((item, j) => (
+                                            <div key={j} className="text-sm">
+                                                <div className="flex justify-between">
+                                                    <span className="font-medium text-slate-700">
+                                                        <span className="text-slate-400 mr-1">{item.qty}x</span>
+                                                        {item.product_name}
+                                                    </span>
+                                                    <span className="text-slate-600">${item.subtotal.toLocaleString()}</span>
+                                                </div>
+                                                {item.modifiers.length > 0 && (
+                                                    <div className="text-xs text-slate-400 pl-5">
+                                                        + {item.modifiers.join(', ')}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                            {/* Total summary */}
+                            <div className="flex justify-between items-center border-t pt-4 font-bold text-slate-900">
+                                <span>Total del día</span>
+                                <span className="text-emerald-600 text-lg">
+                                    ${runnerSaleDetails.reduce((acc, s) => acc + s.total, 0).toLocaleString()}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+                </ScrollArea>
+            </SheetContent>
+        </Sheet>
+        </>
     )
 }

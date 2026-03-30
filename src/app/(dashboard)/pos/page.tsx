@@ -68,7 +68,7 @@ export default function POSPage() {
     }) || []
 
     return (
-        <div className="flex flex-col h-screen bg-slate-100 dark:bg-slate-950">
+        <div className="flex flex-col min-h-screen md:h-screen bg-slate-100 dark:bg-slate-950">
             {/* Header with Menu Button */}
             <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-950 border-b shadow-sm sticky top-0 z-20">
                 <Button
@@ -90,9 +90,9 @@ export default function POSPage() {
             </div>
 
             {/* Main POS Content */}
-            <div className="flex flex-col md:flex-row flex-1 gap-4 p-4 overflow-hidden pb-24 md:pb-4">
+            <div className="flex flex-col md:flex-row flex-1 gap-4 p-4 md:overflow-hidden pb-24 md:pb-4">
                 {/* Left: Product Catalog */}
-                <div className="flex-1 flex flex-col min-w-0 relative h-full">
+                <div className="flex-1 flex flex-col min-w-0 relative md:h-full">
 
                     {/* Category filter buttons - Scrollable horizontally on mobile */}
                     <div className="bg-slate-100 dark:bg-slate-950 pb-3 mb-2 -mx-4 px-4 md:mx-0 md:px-0">
@@ -178,9 +178,10 @@ export default function POSPage() {
                         )}
                     </div>
 
-                    <ScrollArea className="flex-1 -mx-2 px-2 md:mx-0 md:px-0">
+                    {/* Mobile: natural scroll (no height clip). Desktop: ScrollArea inside flex container */}
+                    <div className="md:hidden">
                         {isLoading ? (
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-2 gap-3">
                                 {Array.from({ length: 8 }).map((_, i) => (
                                     <div key={i} className="bg-white rounded-xl border border-slate-200 p-4">
                                         <Skeleton className="h-4 w-3/4 mb-2" />
@@ -191,7 +192,22 @@ export default function POSPage() {
                         ) : (
                             <ProductGrid products={filteredProducts} />
                         )}
-                        <div className="h-24 md:h-0" /> {/* Spacer for bottom bar */}
+                        <div className="h-28" /> {/* Spacer for mobile bottom bar */}
+                    </div>
+
+                    <ScrollArea className="hidden md:block flex-1">
+                        {isLoading ? (
+                            <div className="grid grid-cols-3 lg:grid-cols-4 gap-3">
+                                {Array.from({ length: 8 }).map((_, i) => (
+                                    <div key={i} className="bg-white rounded-xl border border-slate-200 p-4">
+                                        <Skeleton className="h-4 w-3/4 mb-2" />
+                                        <Skeleton className="h-6 w-1/3" />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <ProductGrid products={filteredProducts} />
+                        )}
                     </ScrollArea>
 
                 </div>
