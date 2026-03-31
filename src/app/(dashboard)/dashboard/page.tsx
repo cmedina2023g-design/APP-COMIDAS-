@@ -463,7 +463,7 @@ export default function DashboardPage() {
                     </SheetDescription>
                 </SheetHeader>
 
-                <ScrollArea className="flex-1 px-6">
+                <div className="flex-1 overflow-y-auto px-6 pb-8">
                     {isLoadingDetails ? (
                         <div className="text-center py-10 text-slate-400">Cargando ventas...</div>
                     ) : !runnerSaleDetails || runnerSaleDetails.length === 0 ? (
@@ -519,7 +519,7 @@ export default function DashboardPage() {
                             </div>
                         </div>
                     )}
-                </ScrollArea>
+                </div>
             </SheetContent>
         </Sheet>
         </>
