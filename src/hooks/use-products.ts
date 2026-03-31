@@ -162,8 +162,17 @@ export function useProductWithRecipes(productId: string | null) {
 
             if (modGroupsError) throw modGroupsError
 
+            // Fetch runner prices
+            const { data: runnerPrices, error: rpError } = await supabase
+                .from('product_runner_prices')
+                .select('*')
+                .eq('product_id', productId)
+
+            if (rpError) throw rpError
+
             return {
                 ...product,
+                runner_prices: runnerPrices || [],
                 recipes: recipes.map(r => ({ ...r, ingredient_name: r.ingredients?.name })),
                 modifier_groups: modifierGroups.map(group => ({
                     ...group,
@@ -188,10 +197,11 @@ export function useCreateProduct() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ product, recipes, modifier_groups }: {
+        mutationFn: async ({ product, recipes, modifier_groups, runner_prices }: {
             product: Omit<Product, 'id' | 'organization_id' | 'created_at'>,
             recipes: { ingredient_id: string, qty: number }[],
-            modifier_groups?: any[]
+            modifier_groups?: any[],
+            runner_prices?: { runner_id: string, price: number }[]
         }) => {
             const { organization_id } = await getOrCreateProfile(supabase)
 
@@ -276,6 +286,17 @@ export function useCreateProduct() {
                 }
             }
 
+            // 4. Create Runner Prices
+            if (runner_prices && runner_prices.length > 0) {
+                const rpRows = runner_prices.map(rp => ({
+                    product_id: newDist.id,
+                    runner_id: rp.runner_id,
+                    price: rp.price
+                }))
+                const { error: rpError } = await supabase.from('product_runner_prices').insert(rpRows)
+                if (rpError) throw rpError
+            }
+
             return newDist
         },
         onSuccess: () => {
@@ -295,11 +316,12 @@ export function useUpdateProduct() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ id, product, recipes, modifier_groups }: {
+        mutationFn: async ({ id, product, recipes, modifier_groups, runner_prices }: {
             id: string,
             product: Partial<Product>,
             recipes?: { ingredient_id: string, qty: number }[],
-            modifier_groups?: any[]
+            modifier_groups?: any[],
+            runner_prices?: { runner_id: string, price: number }[]
         }) => {
             const { error: prodError } = await supabase.from('products').update(product).eq('id', id)
             if (prodError) throw prodError
@@ -386,6 +408,19 @@ export function useUpdateProduct() {
                             }
                         }
                     }
+                }
+            }
+            // 4. Create/Replace Runner Prices
+            if (runner_prices) {
+                await supabase.from('product_runner_prices').delete().eq('product_id', id)
+                if (runner_prices.length > 0) {
+                    const rpRows = runner_prices.map(rp => ({
+                        product_id: id,
+                        runner_id: rp.runner_id,
+                        price: rp.price
+                    }))
+                    const { error: rpError } = await supabase.from('product_runner_prices').insert(rpRows)
+                    if (rpError) throw rpError
                 }
             }
         },

@@ -8,8 +8,9 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useCreateProduct, useUpdateProduct, useProductWithRecipes, useCategories } from '@/hooks/use-products'
 import { useIngredients } from '@/hooks/use-inventory'
+import { useProfiles } from '@/hooks/use-profiles'
 import { Product } from '@/lib/types'
-import { Plus, Trash, Loader2 } from 'lucide-react'
+import { Plus, Trash, Loader2, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -25,15 +26,20 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
     const updateMutation = useUpdateProduct()
     const { data: ingredients } = useIngredients()
     const { data: availableCategories } = useCategories()
+    const { data: profiles } = useProfiles()
     const { data: fullProduct, isLoading: isLoadingDetails } = useProductWithRecipes(productToEdit?.id || null)
+
+    const runners = profiles?.filter(p => p.role === 'RUNNER' && p.active) || []
 
     const [name, setName] = useState('')
     const [price, setPrice] = useState('')
-    const [runnerPrice, setRunnerPrice] = useState('')
     const [category, setCategory] = useState('')
     const [subcategory, setSubcategory] = useState('')
     const [imageUrl, setImageUrl] = useState('')
     const [isCustomCategory, setIsCustomCategory] = useState(false)
+
+    // Runner Prices State
+    const [runnerPrices, setRunnerPrices] = useState<{ runner_id: string, price: number }[]>([])
 
     // Subcategory suggestions based on category
     const subcategorySuggestions: Record<string, string[]> = {
@@ -60,11 +66,14 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
         if (productToEdit && fullProduct && open) {
             setName(fullProduct.name)
             setPrice(fullProduct.price.toString())
-            setRunnerPrice(fullProduct.runner_price ? fullProduct.runner_price.toString() : '')
             setCategory(fullProduct.category || '')
             setSubcategory(fullProduct.subcategory || '')
             setImageUrl(fullProduct.image_url || '')
             setIsCustomCategory(false)
+            setRunnerPrices(fullProduct.runner_prices?.map((rp: any) => ({
+                runner_id: rp.runner_id,
+                price: rp.price
+            })) || [])
             setRecipeItems(fullProduct.recipes?.map((r: any) => ({
                 ingredient_id: r.ingredient_id,
                 qty: r.qty
@@ -73,7 +82,7 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
         } else if (!productToEdit && open) {
             setName('')
             setPrice('')
-            setRunnerPrice('')
+            setRunnerPrices([])
             setCategory('')
             setSubcategory('')
             setImageUrl('')
@@ -123,27 +132,27 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                     product: {
                         name,
                         price: Number(price),
-                        runner_price: runnerPrice ? Number(runnerPrice) : null,
                         category,
                         subcategory: subcategory || null,
                         image_url: imageUrl
                     },
                     recipes: recipeItems,
-                    modifier_groups: modifierGroups
+                    modifier_groups: modifierGroups,
+                    runner_prices: runnerPrices
                 })
             } else {
                 await createMutation.mutateAsync({
                     product: {
                         name,
                         price: Number(price),
-                        runner_price: runnerPrice ? Number(runnerPrice) : null,
                         category,
                         subcategory: subcategory || null,
                         image_url: imageUrl,
                         active: true
                     },
                     recipes: recipeItems,
-                    modifier_groups: modifierGroups
+                    modifier_groups: modifierGroups,
+                    runner_prices: runnerPrices
                 })
             }
             onOpenChange(false)
@@ -175,18 +184,14 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
 
                             <div className="flex-1 overflow-y-auto px-1 pb-4 pr-2">
                                 <TabsContent value="general" className="space-y-4 m-0 py-2">
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <Label>Nombre</Label>
                                             <Input value={name} onChange={e => setName(e.target.value)} required />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label>Precio Venta</Label>
+                                            <Label>Precio Venta (General)</Label>
                                             <Input type="number" value={price} onChange={e => setPrice(e.target.value)} required min="0" />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Precio Corredores</Label>
-                                            <Input type="number" value={runnerPrice} onChange={e => setRunnerPrice(e.target.value)} min="0" placeholder="Ej. 2000 (Opcional)" title="Precio con descuento para el rol de RUNNER" />
                                         </div>
                                     </div>
 
@@ -259,6 +264,69 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                                             </p>
                                         </div>
                                     )}
+
+                                    {/* Componente Precios Especiales por Corredor */}
+                                    <div className="mt-8 pt-4 border-t space-y-4 bg-muted/20 -mx-1 px-1 rounded pb-4">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-700">Precios por Corredor</h4>
+                                                <p className="text-xs text-slate-500">Asigna un precio diferente a cada corredor. Opcional.</p>
+                                            </div>
+                                            <Button type="button" size="sm" variant="outline" className="h-8 text-xs bg-white text-blue-600 border-blue-200" onClick={() => {
+                                                setRunnerPrices([...runnerPrices, { runner_id: '', price: 0 }])
+                                            }}>
+                                                <User className="h-3 w-3 mr-1" /> Añadir Corredor
+                                            </Button>
+                                        </div>
+
+                                        {runnerPrices.length === 0 ? (
+                                            <div className="text-center py-4 bg-white border border-dashed rounded-lg text-sm text-slate-400">
+                                                No hay precios especiales. Todos usarán el precio general.
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {runnerPrices.map((rp, idx) => (
+                                                    <div key={idx} className="flex items-center gap-2 bg-white p-2 border rounded-lg shadow-sm">
+                                                        <div className="flex-1">
+                                                            <Select value={rp.runner_id} onValueChange={(val) => {
+                                                                const clone = [...runnerPrices]
+                                                                clone[idx].runner_id = val
+                                                                setRunnerPrices(clone)
+                                                            }}>
+                                                                <SelectTrigger className="h-9 text-sm">
+                                                                    <SelectValue placeholder="Seleccionar corredor..." />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {runners.map(r => (
+                                                                        <SelectItem key={r.id} value={r.id} disabled={runnerPrices.some(existing => existing.runner_id === r.id && existing !== rp)}>
+                                                                            {r.full_name}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="w-32">
+                                                            <div className="relative">
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                                                                <Input type="number" value={rp.price} min="0" placeholder="Precio" className="pl-6 h-9" onChange={(e) => {
+                                                                    const clone = [...runnerPrices]
+                                                                    clone[idx].price = Number(e.target.value)
+                                                                    setRunnerPrices(clone)
+                                                                }} />
+                                                            </div>
+                                                        </div>
+                                                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => {
+                                                            const clone = [...runnerPrices]
+                                                            clone.splice(idx, 1)
+                                                            setRunnerPrices(clone)
+                                                        }}>
+                                                            <Trash className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </TabsContent>
 
                                 <TabsContent value="recipe" className="space-y-4 m-0 py-4">
