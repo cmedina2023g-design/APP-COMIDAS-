@@ -66,49 +66,51 @@ export function ProductGrid({ products, isRunner }: ProductGridProps) {
                     return (
                         <button
                             key={product.id}
-                            className="relative bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md hover:border-primary transition-all active:scale-95 text-left p-0"
+                            className="relative bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md hover:border-primary transition-all active:scale-95 text-left p-0 flex flex-col h-full"
                             onClick={() => handleProductClick(product)}
                         >
                             {/* Left color stripe for category */}
                             <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${categoryColor}`} />
 
-                            <div className="pl-3 pr-2 py-3 md:pl-4 md:pr-3 md:py-4">
-                                <div className="flex items-start justify-between gap-1 md:gap-2 mb-1.5 md:mb-2">
-                                    <h3 className="text-sm md:text-base font-bold text-slate-800 leading-tight line-clamp-2 flex-1 break-words">
-                                        {product.name}
-                                    </h3>
+                            <div className="pl-3 pr-2 py-3 md:pl-4 md:pr-3 md:py-4 flex flex-col flex-1">
+                                <h3 className="text-[13px] sm:text-sm md:text-base font-bold text-slate-800 leading-[1.2] break-words mb-1.5 md:mb-2">
+                                    {product.name}
+                                </h3>
+
+                                <div className="flex flex-wrap items-center gap-1 mb-2">
                                     {noRecipe && (
-                                        <Badge variant="outline" className="text-xs shrink-0 bg-yellow-50 text-yellow-700 border-yellow-300">
+                                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-yellow-50 text-yellow-700 border-yellow-300">
                                             Sin receta
                                         </Badge>
                                     )}
                                     {isNegative && (
-                                        <Badge variant="outline" className="text-xs shrink-0 bg-red-50 text-red-600 border-red-300">
+                                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-red-50 text-red-600 border-red-300">
                                             {units}
                                         </Badge>
                                     )}
                                     {isOutOfStock && (
-                                        <Badge variant="outline" className="text-xs shrink-0 bg-red-50 text-red-600 border-red-300">
-                                            Sin stock
+                                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-red-50 text-red-600 border-red-300">
+                                            Agotado
                                         </Badge>
                                     )}
                                     {isLowStock && (
-                                        <Badge variant="outline" className="text-xs shrink-0 border-orange-500 text-orange-700">
-                                            {units}
+                                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-orange-500 text-orange-700">
+                                            {units} unid.
                                         </Badge>
                                     )}
                                     {hasStock && (
-                                        <Badge variant="secondary" className="text-xs shrink-0">
-                                            {units}
+                                        <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
+                                            {units} unid.
                                         </Badge>
                                     )}
                                 </div>
-                                <div className="flex flex-col sm:flex-row sm:items-end gap-0.5 sm:gap-2 mt-1">
+
+                                <div className="flex flex-col sm:flex-row sm:items-end gap-0.5 sm:gap-2 mt-auto">
                                     <p className="text-lg md:text-xl font-extrabold text-green-600 leading-none">
                                         ${getEffectivePrice(product).toLocaleString()}
                                     </p>
                                     {isRunner && product.runner_price != null && (
-                                        <p className="text-[10px] md:text-xs text-slate-400 line-through">
+                                        <p className="text-[10px] md:text-[11px] text-slate-400 line-through">
                                             ${product.price.toLocaleString()}
                                         </p>
                                     )}
