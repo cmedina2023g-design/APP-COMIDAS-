@@ -170,9 +170,18 @@ export function useProductWithRecipes(productId: string | null) {
 
             if (rpError) throw rpError
 
+            // Fetch shift prices
+            const { data: shiftPrices, error: spError } = await supabase
+                .from('product_shift_prices')
+                .select('*')
+                .eq('product_id', productId)
+
+            if (spError) throw spError
+
             return {
                 ...product,
                 runner_prices: runnerPrices || [],
+                shift_prices: shiftPrices || [],
                 recipes: recipes.map(r => ({ ...r, ingredient_name: r.ingredients?.name })),
                 modifier_groups: modifierGroups.map(group => ({
                     ...group,
@@ -197,11 +206,12 @@ export function useCreateProduct() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ product, recipes, modifier_groups, runner_prices }: {
+        mutationFn: async ({ product, recipes, modifier_groups, runner_prices, shift_prices }: {
             product: Omit<Product, 'id' | 'organization_id' | 'created_at'>,
             recipes: { ingredient_id: string, qty: number }[],
             modifier_groups?: any[],
-            runner_prices?: { runner_id: string, price: number }[]
+            runner_prices?: { runner_id: string, price: number }[],
+            shift_prices?: { shift_id: string, price: number }[]
         }) => {
             const { organization_id } = await getOrCreateProfile(supabase)
 
@@ -297,6 +307,17 @@ export function useCreateProduct() {
                 if (rpError) throw rpError
             }
 
+            // 5. Create Shift Prices
+            if (shift_prices && shift_prices.length > 0) {
+                const spRows = shift_prices.map(sp => ({
+                    product_id: newDist.id,
+                    shift_id: sp.shift_id,
+                    price: sp.price
+                }))
+                const { error: spError } = await supabase.from('product_shift_prices').insert(spRows)
+                if (spError) throw spError
+            }
+
             return newDist
         },
         onSuccess: () => {
@@ -316,12 +337,13 @@ export function useUpdateProduct() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ id, product, recipes, modifier_groups, runner_prices }: {
+        mutationFn: async ({ id, product, recipes, modifier_groups, runner_prices, shift_prices }: {
             id: string,
             product: Partial<Product>,
             recipes?: { ingredient_id: string, qty: number }[],
             modifier_groups?: any[],
-            runner_prices?: { runner_id: string, price: number }[]
+            runner_prices?: { runner_id: string, price: number }[],
+            shift_prices?: { shift_id: string, price: number }[]
         }) => {
             const { error: prodError } = await supabase.from('products').update(product).eq('id', id)
             if (prodError) throw prodError
@@ -421,6 +443,20 @@ export function useUpdateProduct() {
                     }))
                     const { error: rpError } = await supabase.from('product_runner_prices').insert(rpRows)
                     if (rpError) throw rpError
+                }
+            }
+
+            // 5. Create/Replace Shift Prices
+            if (shift_prices) {
+                await supabase.from('product_shift_prices').delete().eq('product_id', id)
+                if (shift_prices.length > 0) {
+                    const spRows = shift_prices.map(sp => ({
+                        product_id: id,
+                        shift_id: sp.shift_id,
+                        price: sp.price
+                    }))
+                    const { error: spError } = await supabase.from('product_shift_prices').insert(spRows)
+                    if (spError) throw spError
                 }
             }
         },

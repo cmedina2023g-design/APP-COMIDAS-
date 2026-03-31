@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCreateProduct, useUpdateProduct, useProductWithRecipes, useCategories } from '@/hooks/use-products'
 import { useIngredients } from '@/hooks/use-inventory'
 import { useProfiles } from '@/hooks/use-profiles'
+import { useShifts } from '@/hooks/use-sessions'
 import { Product } from '@/lib/types'
-import { Plus, Trash, Loader2, User } from 'lucide-react'
+import { Plus, Trash, Loader2, User, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -27,6 +28,7 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
     const { data: ingredients } = useIngredients()
     const { data: availableCategories } = useCategories()
     const { data: profiles } = useProfiles()
+    const { data: shiftsConfig } = useShifts()
     const { data: fullProduct, isLoading: isLoadingDetails } = useProductWithRecipes(productToEdit?.id || null)
 
     const runners = profiles?.filter(p => p.role === 'RUNNER' && p.active) || []
@@ -40,6 +42,9 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
 
     // Runner Prices State
     const [runnerPrices, setRunnerPrices] = useState<{ runner_id: string, price: number }[]>([])
+
+    // Shift Prices State
+    const [shiftPrices, setShiftPrices] = useState<{ shift_id: string, price: number }[]>([])
 
     // Subcategory suggestions based on category
     const subcategorySuggestions: Record<string, string[]> = {
@@ -74,6 +79,10 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                 runner_id: rp.runner_id,
                 price: rp.price
             })) || [])
+            setShiftPrices(fullProduct.shift_prices?.map((sp: any) => ({
+                shift_id: sp.shift_id,
+                price: sp.price
+            })) || [])
             setRecipeItems(fullProduct.recipes?.map((r: any) => ({
                 ingredient_id: r.ingredient_id,
                 qty: r.qty
@@ -83,6 +92,7 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
             setName('')
             setPrice('')
             setRunnerPrices([])
+            setShiftPrices([])
             setCategory('')
             setSubcategory('')
             setImageUrl('')
@@ -138,7 +148,8 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                     },
                     recipes: recipeItems,
                     modifier_groups: modifierGroups,
-                    runner_prices: runnerPrices
+                    runner_prices: runnerPrices,
+                    shift_prices: shiftPrices
                 })
             } else {
                 await createMutation.mutateAsync({
@@ -152,7 +163,8 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                     },
                     recipes: recipeItems,
                     modifier_groups: modifierGroups,
-                    runner_prices: runnerPrices
+                    runner_prices: runnerPrices,
+                    shift_prices: shiftPrices
                 })
             }
             onOpenChange(false)
@@ -319,6 +331,69 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                                                             const clone = [...runnerPrices]
                                                             clone.splice(idx, 1)
                                                             setRunnerPrices(clone)
+                                                        }}>
+                                                            <Trash className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Componente Precios Especiales por Turno */}
+                                    <div className="mt-8 pt-4 border-t space-y-4 bg-muted/20 -mx-1 px-1 rounded pb-4">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-700">Precios por Turno (Local)</h4>
+                                                <p className="text-xs text-slate-500">Cambia el precio automáticamente dependiendo de la hora del día.</p>
+                                            </div>
+                                            <Button type="button" size="sm" variant="outline" className="h-8 text-xs bg-white text-emerald-600 border-emerald-200" onClick={() => {
+                                                setShiftPrices([...shiftPrices, { shift_id: '', price: 0 }])
+                                            }}>
+                                                <Clock className="h-3 w-3 mr-1" /> Añadir Turno
+                                            </Button>
+                                        </div>
+
+                                        {shiftPrices.length === 0 ? (
+                                            <div className="text-center py-4 bg-white border border-dashed rounded-lg text-sm text-slate-400">
+                                                No hay precios por turno. Se aplicará el precio general siempre.
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {shiftPrices.map((sp, idx) => (
+                                                    <div key={idx} className="flex items-center gap-2 bg-white p-2 border rounded-lg shadow-sm">
+                                                        <div className="flex-1">
+                                                            <Select value={sp.shift_id} onValueChange={(val) => {
+                                                                const clone = [...shiftPrices]
+                                                                clone[idx].shift_id = val
+                                                                setShiftPrices(clone)
+                                                            }}>
+                                                                <SelectTrigger className="h-9 text-sm">
+                                                                    <SelectValue placeholder="Seleccionar turno..." />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {shiftsConfig?.map(s => (
+                                                                        <SelectItem key={s.id} value={s.id} disabled={shiftPrices.some(existing => existing.shift_id === s.id && existing !== sp)}>
+                                                                            {s.name} ({s.start_time.slice(0, 5)} - {s.end_time.slice(0, 5)})
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="w-32">
+                                                            <div className="relative">
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                                                                <Input type="number" value={sp.price} min="0" placeholder="Precio" className="pl-6 h-9" onChange={(e) => {
+                                                                    const clone = [...shiftPrices]
+                                                                    clone[idx].price = Number(e.target.value)
+                                                                    setShiftPrices(clone)
+                                                                }} />
+                                                            </div>
+                                                        </div>
+                                                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => {
+                                                            const clone = [...shiftPrices]
+                                                            clone.splice(idx, 1)
+                                                            setShiftPrices(clone)
                                                         }}>
                                                             <Trash className="h-4 w-4" />
                                                         </Button>

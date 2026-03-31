@@ -29,11 +29,17 @@ export function ProductGrid({ products, isRunner }: ProductGridProps) {
     const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null)
     const [modalOpen, setModalOpen] = React.useState(false)
 
+    const getEffectivePrice = (product: Product) => {
+        if (isRunner && product.runner_price != null) return product.runner_price
+        if (!isRunner && product.shift_price != null) return product.shift_price
+        return product.price
+    }
+
     const handleProductClick = (product: Product) => {
-        // Enforce runner price dynamically for the cart
+        // Enforce runner or shift price dynamically for the cart
         const productWithEffectivePrice = {
             ...product,
-            price: (isRunner && product.runner_price != null) ? product.runner_price : product.price
+            price: getEffectivePrice(product)
         }
 
         // Check if product has modifier groups
@@ -99,12 +105,17 @@ export function ProductGrid({ products, isRunner }: ProductGridProps) {
                                 </div>
                                 <div className="flex items-end gap-2">
                                     <p className="text-xl font-extrabold text-green-600">
-                                        ${(isRunner && product.runner_price != null ? product.runner_price : product.price).toLocaleString()}
+                                        ${getEffectivePrice(product).toLocaleString()}
                                     </p>
                                     {isRunner && product.runner_price != null && (
                                         <p className="text-xs text-slate-400 line-through mb-1">
                                             ${product.price.toLocaleString()}
                                         </p>
+                                    )}
+                                    {!isRunner && product.shift_price != null && (
+                                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-5 border-sky-300 text-sky-600 bg-sky-50 mb-1">
+                                            Especial
+                                        </Badge>
                                     )}
                                 </div>
                             </div>

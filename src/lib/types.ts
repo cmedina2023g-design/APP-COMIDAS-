@@ -25,7 +25,9 @@ export type Product = {
     active: boolean
     image_url: string | null
     runner_price?: number | null // Used by POS dynamically fetched from RPC
+    shift_price?: number | null // Used by POS dynamically fetched from RPC
     runner_prices?: ProductRunnerPrice[] // Used by Admin
+    shift_prices?: ProductShiftPrice[] // Used by Admin
     modifier_groups?: ProductModifierGroup[]
 }
 
@@ -33,6 +35,13 @@ export type ProductRunnerPrice = {
     id: string
     product_id: string
     runner_id: string
+    price: number
+}
+
+export type ProductShiftPrice = {
+    id: string
+    product_id: string
+    shift_id: string
     price: number
 }
 
