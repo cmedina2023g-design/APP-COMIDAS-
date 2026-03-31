@@ -11,15 +11,18 @@ import { DailySalesWidget } from '@/components/pos/daily-sales-widget'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { useCurrentShift } from '@/hooks/use-sessions'
+import { useCurrentProfile } from '@/hooks/use-profiles'
 import { Clock, Sun, Moon } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { MealRegistration } from '@/components/employee/meal-registration'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { RunnerDailySummary } from '@/components/pos/runner-daily-summary'
 import { useCartStore } from '@/lib/store/cart'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function POSPage() {
     const { data: products, isLoading } = useProductsWithStock()
+    const { data: currentProfile } = useCurrentProfile()
     const [search, setSearch] = useState('')
     const [selectedCategory, setSelectedCategory] = useState<string | null>('Combos')
     const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
@@ -84,6 +87,28 @@ export default function POSPage() {
                         Street Food POS
                     </span>
                 </div>
+                {currentProfile?.role === 'RUNNER' && (
+                    <div className="flex-shrink-0">
+                        <Sheet>
+                            <SheetTrigger asChild>
+                                <Button variant="outline" className="h-9 font-bold text-blue-600 border-blue-200 hover:bg-blue-50">
+                                    Mi Resumen
+                                </Button>
+                            </SheetTrigger>
+                            <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl sm:max-w-md sm:h-full sm:right-0 sm:side-right" aria-describedby={undefined}>
+                                <SheetHeader>
+                                    <SheetTitle className="sr-only">Resumen de Ventas</SheetTitle>
+                                </SheetHeader>
+                                <div className="h-full overflow-y-auto px-1">
+                                    <RunnerDailySummary 
+                                        runnerId={currentProfile.id} 
+                                        runnerName={currentProfile.full_name || 'Corredor'} 
+                                    />
+                                </div>
+                            </SheetContent>
+                        </Sheet>
+                    </div>
+                )}
                 <div className="flex-shrink-0">
                     <ShiftBadge />
                 </div>
@@ -190,7 +215,7 @@ export default function POSPage() {
                                 ))}
                             </div>
                         ) : (
-                            <ProductGrid products={filteredProducts} />
+                            <ProductGrid products={filteredProducts} isRunner={currentProfile?.role === 'RUNNER'} />
                         )}
                         <div className="h-28" /> {/* Spacer for mobile bottom bar */}
                     </div>
@@ -206,7 +231,7 @@ export default function POSPage() {
                                 ))}
                             </div>
                         ) : (
-                            <ProductGrid products={filteredProducts} />
+                            <ProductGrid products={filteredProducts} isRunner={currentProfile?.role === 'RUNNER'} />
                         )}
                     </ScrollArea>
 

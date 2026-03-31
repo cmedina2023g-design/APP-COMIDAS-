@@ -8,6 +8,7 @@ import { ProductOptionsModal } from './product-options-modal'
 
 interface ProductGridProps {
     products: (Product & { available_units?: number })[]
+    isRunner?: boolean
 }
 
 // Color mapping for categories
@@ -23,18 +24,24 @@ const categoryColors: Record<string, string> = {
     'Salchipapas para compartir': 'bg-teal-500',
 }
 
-export function ProductGrid({ products }: ProductGridProps) {
+export function ProductGrid({ products, isRunner }: ProductGridProps) {
     const addItem = useCartStore(state => state.addItem)
     const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null)
     const [modalOpen, setModalOpen] = React.useState(false)
 
     const handleProductClick = (product: Product) => {
+        // Enforce runner price dynamically for the cart
+        const productWithEffectivePrice = {
+            ...product,
+            price: (isRunner && product.runner_price != null) ? product.runner_price : product.price
+        }
+
         // Check if product has modifier groups
         if (product.modifier_groups && product.modifier_groups.length > 0) {
-            setSelectedProduct(product)
+            setSelectedProduct(productWithEffectivePrice)
             setModalOpen(true)
         } else {
-            addItem(product)
+            addItem(productWithEffectivePrice)
         }
     }
 
@@ -90,9 +97,16 @@ export function ProductGrid({ products }: ProductGridProps) {
                                         </Badge>
                                     )}
                                 </div>
-                                <p className="text-xl font-extrabold text-green-600">
-                                    ${product.price.toLocaleString()}
-                                </p>
+                                <div className="flex items-end gap-2">
+                                    <p className="text-xl font-extrabold text-green-600">
+                                        ${(isRunner && product.runner_price != null ? product.runner_price : product.price).toLocaleString()}
+                                    </p>
+                                    {isRunner && product.runner_price != null && (
+                                        <p className="text-xs text-slate-400 line-through mb-1">
+                                            ${product.price.toLocaleString()}
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                         </button>
                     )

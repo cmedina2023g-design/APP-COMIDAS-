@@ -24,6 +24,7 @@ export type Product = {
     subcategory: string | null
     active: boolean
     image_url: string | null
+    runner_price?: number | null
     modifier_groups?: ProductModifierGroup[]
 }
 

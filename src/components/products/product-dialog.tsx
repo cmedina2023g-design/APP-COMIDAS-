@@ -29,6 +29,7 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
 
     const [name, setName] = useState('')
     const [price, setPrice] = useState('')
+    const [runnerPrice, setRunnerPrice] = useState('')
     const [category, setCategory] = useState('')
     const [subcategory, setSubcategory] = useState('')
     const [imageUrl, setImageUrl] = useState('')
@@ -59,6 +60,7 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
         if (productToEdit && fullProduct && open) {
             setName(fullProduct.name)
             setPrice(fullProduct.price.toString())
+            setRunnerPrice(fullProduct.runner_price ? fullProduct.runner_price.toString() : '')
             setCategory(fullProduct.category || '')
             setSubcategory(fullProduct.subcategory || '')
             setImageUrl(fullProduct.image_url || '')
@@ -71,6 +73,7 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
         } else if (!productToEdit && open) {
             setName('')
             setPrice('')
+            setRunnerPrice('')
             setCategory('')
             setSubcategory('')
             setImageUrl('')
@@ -120,6 +123,7 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                     product: {
                         name,
                         price: Number(price),
+                        runner_price: runnerPrice ? Number(runnerPrice) : null,
                         category,
                         subcategory: subcategory || null,
                         image_url: imageUrl
@@ -132,6 +136,7 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                     product: {
                         name,
                         price: Number(price),
+                        runner_price: runnerPrice ? Number(runnerPrice) : null,
                         category,
                         subcategory: subcategory || null,
                         image_url: imageUrl,
@@ -170,7 +175,7 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
 
                             <div className="flex-1 overflow-y-auto px-1 pb-4 pr-2">
                                 <TabsContent value="general" className="space-y-4 m-0 py-2">
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                         <div className="space-y-2">
                                             <Label>Nombre</Label>
                                             <Input value={name} onChange={e => setName(e.target.value)} required />
@@ -178,6 +183,10 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                                         <div className="space-y-2">
                                             <Label>Precio Venta</Label>
                                             <Input type="number" value={price} onChange={e => setPrice(e.target.value)} required min="0" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Precio Corredores</Label>
+                                            <Input type="number" value={runnerPrice} onChange={e => setRunnerPrice(e.target.value)} min="0" placeholder="Ej. 2000 (Opcional)" title="Precio con descuento para el rol de RUNNER" />
                                         </div>
                                     </div>
 
