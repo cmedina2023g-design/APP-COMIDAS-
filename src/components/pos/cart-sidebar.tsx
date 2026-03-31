@@ -17,19 +17,19 @@ export function CartSidebar() {
     const { data: paymentMethods } = usePaymentMethods()
     const createSaleMutation = useCreateSale()
 
-    const [payments, setPayments] = useState<{ methodId: string, amount: number }[]>([])
+    const [payments, setPayments] = useState<{ methodId: string, amount: number | '' }[]>([])
     const [successData, setSuccessData] = useState<{ id: string, total: number } | null>(null)
 
     const totalAmount = total()
-    const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0)
+    const paidAmount = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
     const remainingAmount = totalAmount - paidAmount
 
     const handleAddPayment = (methodId: string) => {
         // Add a new payment with the remaining amount as default
-        setPayments([...payments, { methodId, amount: remainingAmount }])
+        setPayments([...payments, { methodId, amount: remainingAmount > 0 ? remainingAmount : 0 }])
     }
 
-    const handleUpdatePayment = (index: number, amount: number) => {
+    const handleUpdatePayment = (index: number, amount: number | '') => {
         const newPayments = [...payments]
         newPayments[index].amount = amount
         setPayments(newPayments)
@@ -53,7 +53,7 @@ export function CartSidebar() {
         try {
             const saleId = await createSaleMutation.mutateAsync({
                 total: totalAmount,
-                payments: payments,
+                payments: payments.map(p => ({ methodId: p.methodId, amount: Number(p.amount) || 0 })),
                 items
             })
 
@@ -128,8 +128,8 @@ export function CartSidebar() {
                                         <Input
                                             type="number"
                                             className="w-24 h-8"
-                                            value={payment.amount}
-                                            onChange={(e) => handleUpdatePayment(index, Number(e.target.value))}
+                                            value={payment.amount === '' ? '' : payment.amount}
+                                            onChange={(e) => handleUpdatePayment(index, e.target.value === '' ? '' : Number(e.target.value))}
                                         />
                                         <Button
                                             variant="ghost"

@@ -53,7 +53,7 @@ export function ProductGrid({ products, isRunner }: ProductGridProps) {
 
     return (
         <>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-3">
                 {products.map(product => {
                     const categoryColor = categoryColors[product.category || ''] || 'bg-slate-400'
                     const noRecipe = product.available_units === undefined || product.available_units >= 999999
@@ -72,9 +72,9 @@ export function ProductGrid({ products, isRunner }: ProductGridProps) {
                             {/* Left color stripe for category */}
                             <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${categoryColor}`} />
 
-                            <div className="pl-4 pr-3 py-4">
-                                <div className="flex items-start justify-between gap-2 mb-2">
-                                    <h3 className="text-base font-bold text-slate-800 leading-tight line-clamp-2 flex-1">
+                            <div className="pl-3 pr-2 py-3 md:pl-4 md:pr-3 md:py-4">
+                                <div className="flex items-start justify-between gap-1 md:gap-2 mb-1.5 md:mb-2">
+                                    <h3 className="text-sm md:text-base font-bold text-slate-800 leading-tight line-clamp-2 flex-1 break-words">
                                         {product.name}
                                     </h3>
                                     {noRecipe && (
@@ -103,17 +103,17 @@ export function ProductGrid({ products, isRunner }: ProductGridProps) {
                                         </Badge>
                                     )}
                                 </div>
-                                <div className="flex items-end gap-2">
-                                    <p className="text-xl font-extrabold text-green-600">
+                                <div className="flex flex-col sm:flex-row sm:items-end gap-0.5 sm:gap-2 mt-1">
+                                    <p className="text-lg md:text-xl font-extrabold text-green-600 leading-none">
                                         ${getEffectivePrice(product).toLocaleString()}
                                     </p>
                                     {isRunner && product.runner_price != null && (
-                                        <p className="text-xs text-slate-400 line-through mb-1">
+                                        <p className="text-[10px] md:text-xs text-slate-400 line-through">
                                             ${product.price.toLocaleString()}
                                         </p>
                                     )}
                                     {!isRunner && product.shift_price != null && (
-                                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-5 border-sky-300 text-sky-600 bg-sky-50 mb-1">
+                                        <Badge variant="outline" className="text-[9px] md:text-[10px] px-1 py-0 h-4 md:h-5 border-sky-300 text-sky-600 bg-sky-50 mt-1 sm:mt-0">
                                             Especial
                                         </Badge>
                                     )}

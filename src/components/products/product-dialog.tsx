@@ -41,10 +41,10 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
     const [isCustomCategory, setIsCustomCategory] = useState(false)
 
     // Runner Prices State
-    const [runnerPrices, setRunnerPrices] = useState<{ runner_id: string, price: number }[]>([])
+    const [runnerPrices, setRunnerPrices] = useState<{ runner_id: string, price: number | '' }[]>([])
 
     // Shift Prices State
-    const [shiftPrices, setShiftPrices] = useState<{ shift_id: string, price: number }[]>([])
+    const [shiftPrices, setShiftPrices] = useState<{ shift_id: string, price: number | '' }[]>([])
 
     // Subcategory suggestions based on category
     const subcategorySuggestions: Record<string, string[]> = {
@@ -55,7 +55,7 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
     }
 
     // Recipe State
-    const [recipeItems, setRecipeItems] = useState<{ ingredient_id: string, qty: number }[]>([])
+    const [recipeItems, setRecipeItems] = useState<{ ingredient_id: string, qty: number | '' }[]>([])
     const [selectedIngredient, setSelectedIngredient] = useState('')
     const [selectedQty, setSelectedQty] = useState('')
 
@@ -136,6 +136,11 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
         }
 
         try {
+            // Clean up empty numbers from recipes and prices before saving
+            const safeRecipeItems = recipeItems.map(r => ({ ...r, qty: Number(r.qty) || 0 }))
+            const safeRunnerPrices = runnerPrices.map(rp => ({ ...rp, price: Number(rp.price) || 0 }))
+            const safeShiftPrices = shiftPrices.map(sp => ({ ...sp, price: Number(sp.price) || 0 }))
+
             if (productToEdit) {
                 await updateMutation.mutateAsync({
                     id: productToEdit.id,
@@ -146,10 +151,10 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                         subcategory: subcategory || null,
                         image_url: imageUrl
                     },
-                    recipes: recipeItems,
+                    recipes: safeRecipeItems,
                     modifier_groups: modifierGroups,
-                    runner_prices: runnerPrices,
-                    shift_prices: shiftPrices
+                    runner_prices: safeRunnerPrices,
+                    shift_prices: safeShiftPrices
                 })
             } else {
                 await createMutation.mutateAsync({
@@ -161,10 +166,10 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                         image_url: imageUrl,
                         active: true
                     },
-                    recipes: recipeItems,
+                    recipes: safeRecipeItems,
                     modifier_groups: modifierGroups,
-                    runner_prices: runnerPrices,
-                    shift_prices: shiftPrices
+                    runner_prices: safeRunnerPrices,
+                    shift_prices: safeShiftPrices
                 })
             }
             onOpenChange(false)
@@ -320,9 +325,9 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                                                         <div className="w-32">
                                                             <div className="relative">
                                                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-                                                                <Input type="number" value={rp.price} min="0" placeholder="Precio" className="pl-6 h-9" onChange={(e) => {
+                                                                <Input type="number" value={rp.price === '' ? '' : rp.price} min="0" placeholder="Precio" className="pl-6 h-9" onChange={(e) => {
                                                                     const clone = [...runnerPrices]
-                                                                    clone[idx].price = Number(e.target.value)
+                                                                    clone[idx].price = e.target.value === '' ? '' : Number(e.target.value)
                                                                     setRunnerPrices(clone)
                                                                 }} />
                                                             </div>
@@ -383,9 +388,9 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                                                         <div className="w-32">
                                                             <div className="relative">
                                                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-                                                                <Input type="number" value={sp.price} min="0" placeholder="Precio" className="pl-6 h-9" onChange={(e) => {
+                                                                <Input type="number" value={sp.price === '' ? '' : sp.price} min="0" placeholder="Precio" className="pl-6 h-9" onChange={(e) => {
                                                                     const clone = [...shiftPrices]
-                                                                    clone[idx].price = Number(e.target.value)
+                                                                    clone[idx].price = e.target.value === '' ? '' : Number(e.target.value)
                                                                     setShiftPrices(clone)
                                                                 }} />
                                                             </div>

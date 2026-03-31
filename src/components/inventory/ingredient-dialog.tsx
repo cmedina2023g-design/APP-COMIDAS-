@@ -23,8 +23,8 @@ export function IngredientDialog({ ingredientToEdit, open, onOpenChange }: Ingre
 
     const [name, setName] = useState('')
     const [unit, setUnit] = useState('g')
-    const [minStock, setMinStock] = useState('0')
-    const [costUnit, setCostUnit] = useState('0')
+    const [minStock, setMinStock] = useState<string | number>('')
+    const [costUnit, setCostUnit] = useState<string | number>('')
     const [category, setCategory] = useState('')
     const [isCustomCategory, setIsCustomCategory] = useState(false)
 
@@ -91,7 +91,7 @@ export function IngredientDialog({ ingredientToEdit, open, onOpenChange }: Ingre
 
                     <div className="space-y-2">
                         <Label>Costo por Unidad ($)</Label>
-                        <Input type="number" value={costUnit} onChange={e => setCostUnit(e.target.value)} min="0" placeholder="0" />
+                        <Input type="number" value={costUnit === '' ? '' : costUnit} onChange={e => setCostUnit(e.target.value === '' ? '' : Number(e.target.value))} min="0" placeholder="0" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -115,7 +115,7 @@ export function IngredientDialog({ ingredientToEdit, open, onOpenChange }: Ingre
                         </div>
                         <div className="space-y-2">
                             <Label>Stock Mínimo (Alerta)</Label>
-                            <Input type="number" value={minStock} onChange={e => setMinStock(e.target.value)} min="0" />
+                            <Input type="number" value={minStock === '' ? '' : minStock} onChange={e => setMinStock(e.target.value === '' ? '' : Number(e.target.value))} min="0" />
                         </div>
                     </div>
 

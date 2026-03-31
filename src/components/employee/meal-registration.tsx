@@ -15,7 +15,7 @@ import { formatCurrency } from '@/lib/utils'
 export function MealRegistration() {
     const [selectedEmployee, setSelectedEmployee] = useState<string>('')
     const [selectedProduct, setSelectedProduct] = useState<string>('')
-    const [quantity, setQuantity] = useState(1)
+    const [quantity, setQuantity] = useState<number | ''>(1)
     const [searchQuery, setSearchQuery] = useState('')
 
     const { data: products = [] } = useProductsWithStock()
@@ -34,14 +34,14 @@ export function MealRegistration() {
     )
 
     const handleAddMeal = () => {
-        if (!selectedEmployee || !selectedProduct || quantity < 1) {
+        if (!selectedEmployee || !selectedProduct || Number(quantity) < 1) {
             return
         }
 
         recordMeal.mutate({
             employee_id: selectedEmployee,
             product_id: selectedProduct,
-            quantity: quantity
+            quantity: Number(quantity) || 1
         }, {
             onSuccess: () => {
                 setSelectedProduct('')
@@ -139,7 +139,7 @@ export function MealRegistration() {
                                             <Button
                                                 size="icon"
                                                 variant="outline"
-                                                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                                                onClick={() => setQuantity(Math.max(1, (Number(quantity) || 1) - 1))}
                                             >
                                                 <Minus className="h-4 w-4" />
                                             </Button>
@@ -147,14 +147,14 @@ export function MealRegistration() {
                                                 type="number"
                                                 min={1}
                                                 max={99}
-                                                value={quantity}
-                                                onChange={(e) => setQuantity(Math.max(1, Math.min(99, parseInt(e.target.value) || 1)))}
+                                                value={quantity === '' ? '' : quantity}
+                                                onChange={(e) => setQuantity(e.target.value === '' ? '' : Math.max(1, Math.min(99, parseInt(e.target.value) || 1)))}
                                                 className="w-16 h-10 text-center font-bold text-lg"
                                             />
                                             <Button
                                                 size="icon"
                                                 variant="outline"
-                                                onClick={() => setQuantity(quantity + 1)}
+                                                onClick={() => setQuantity((Number(quantity) || 0) + 1)}
                                             >
                                                 <Plus className="h-4 w-4" />
                                             </Button>
