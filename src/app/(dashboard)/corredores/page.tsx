@@ -17,11 +17,9 @@ import {
     ChevronDown,
     ArrowLeft,
     CheckCircle,
-    ShoppingBag,
     RotateCcw,
     TrendingUp,
-    Users,
-    X
+    Users
 } from 'lucide-react'
 import Link from 'next/link'
 import {
@@ -322,7 +320,7 @@ type ReturnSummaryItem = {
 }
 
 function BulkReturnModal({
-    runnerId,
+    runnerId: _runnerId,
     runnerName,
     items,
     onClose
@@ -333,30 +331,21 @@ function BulkReturnModal({
     onClose: () => void
 }) {
     const bulkReturn = useBulkReturnInventory()
-    const [returnQtys, setReturnQtys] = useState<Record<string, number | ''>>(() => {
-        // Pre-fill: returned = assigned - sold_qty (keep 0 as default)
-        const init: Record<string, number | ''> = {}
-        for (const item of items) {
-            init[item.id] = ''
-        }
-        return init
-    })
+    const [screen, setScreen] = useState<'choose' | 'input' | 'summary'>('choose')
+    const [returnQtys, setReturnQtys] = useState<Record<string, number | ''>>(() =>
+        Object.fromEntries(items.map(i => [i.id, '']))
+    )
     const [summary, setSummary] = useState<ReturnSummaryItem[] | null>(null)
 
-    const setAll = (val: number) => {
-        const next: Record<string, number | ''> = {}
-        for (const item of items) {
-            // Can't return more than assigned, cap automatically
-            next[item.id] = Math.min(val, item.assigned_qty)
-        }
-        setReturnQtys(next)
-    }
+    const totalAssigned = items.reduce((s, i) => s + i.assigned_qty, 0)
+    const totalToReturn = items.reduce((s, i) => s + (Number(returnQtys[i.id]) || 0), 0)
+    const hasOverLimit = items.some(i => (Number(returnQtys[i.id]) || 0) > i.assigned_qty)
 
-    const handleConfirm = async () => {
-        // Distribute returned qty across sub-assignments (oldest-first fill)
+    // Build the RPC payload distributing qty across sub-assignments
+    const buildPayload = (qtys: Record<string, number>) => {
         const returns: { assignment_id: string; returned_qty: number }[] = []
         for (const item of items) {
-            const totalToReturn = Number(returnQtys[item.id]) || 0
+            const totalToReturn = qtys[item.id] ?? 0
             const subIds = item._ids || [{ id: item.id, assigned_qty: item.assigned_qty }]
             let remaining = totalToReturn
             for (const sub of subIds) {
@@ -365,185 +354,200 @@ function BulkReturnModal({
                 remaining -= give
                 if (remaining <= 0) break
             }
-            // Any sub-assignments not covered get 0
             for (const sub of subIds) {
                 if (!returns.find(r => r.assignment_id === sub.id)) {
                     returns.push({ assignment_id: sub.id, returned_qty: 0 })
                 }
             }
         }
+        return returns
+    }
 
-        const result = await bulkReturn.mutateAsync(returns)
-
+    const executeReturn = async (qtys: Record<string, number>) => {
+        const result = await bulkReturn.mutateAsync(buildPayload(qtys))
         if (result?.success) {
-            // Merge result items by product name
-            const productSummary: Record<string, ReturnSummaryItem> = {}
+            const map: Record<string, ReturnSummaryItem> = {}
             for (const ri of result.items || []) {
                 const item = items.find(i =>
                     (i._ids || [{ id: i.id }]).some((s: any) => s.id === ri.assignment_id)
                 )
                 const name = item?.product?.name || '—'
                 const price = item?.product?.price || 0
-                if (!productSummary[name]) {
-                    productSummary[name] = { name, assigned: 0, returned: 0, sold: 0, value: 0 }
-                }
-                productSummary[name].assigned += ri.assigned_qty
-                productSummary[name].returned += ri.returned_qty
-                productSummary[name].sold += ri.sold_qty
-                productSummary[name].value += ri.sold_qty * price
+                if (!map[name]) map[name] = { name, assigned: 0, returned: 0, sold: 0, value: 0 }
+                map[name].assigned += ri.assigned_qty
+                map[name].returned += ri.returned_qty
+                map[name].sold += ri.sold_qty
+                map[name].value += ri.sold_qty * price
             }
-            setSummary(Object.values(productSummary))
+            setSummary(Object.values(map))
+            setScreen('summary')
         }
     }
 
-    // Use product id (first _ids entry or item.id) as key
-    const itemKey = (item: BulkItem) => item._ids?.[0]?.id || item.id
-    const totalReturned = items.reduce((s, item) => s + (Number(returnQtys[itemKey(item)]) || 0), 0)
-    const totalSoldEst = items.reduce((s, item) => s + (item.assigned_qty - (Number(returnQtys[itemKey(item)]) || 0)), 0)
+    const handleAllSold = () =>
+        executeReturn(Object.fromEntries(items.map(i => [i.id, 0])))
+
+    const handleWithReturns = () =>
+        executeReturn(Object.fromEntries(items.map(i => [i.id, Number(returnQtys[i.id]) || 0])))
 
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-lg flex flex-col max-h-[90vh]" aria-describedby="bulk-return-desc">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <RotateCcw className="h-5 w-5 text-orange-500" />
-                        Cerrar Turno — {runnerName}
-                    </DialogTitle>
-                    <DialogDescription id="bulk-return-desc">
-                        Ingresa las unidades que regresó el corredor. Se procesarán todas de una vez.
-                    </DialogDescription>
-                </DialogHeader>
+            <DialogContent className="max-w-sm w-full max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl">
 
-                {summary ? (
-                    /* ── POST-RETURN SUMMARY SCREEN ── */
-                    <div className="flex-1 overflow-y-auto space-y-4 py-2">
-                        <div className="flex items-center gap-2 text-green-600 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-                            <CheckCircle className="h-5 w-5 shrink-0" />
-                            <p className="text-sm font-medium">Turno cerrado exitosamente</p>
+                {/* Header */}
+                <div className="px-5 pt-5 pb-4 border-b">
+                    <div className="flex items-center gap-2">
+                        <RotateCcw className="h-4 w-4 text-orange-500 shrink-0" />
+                        <span className="font-bold text-slate-800">Cerrar Turno</span>
+                    </div>
+                    <p className="text-sm text-slate-500 mt-0.5 pl-6">{runnerName}</p>
+                </div>
+
+                {/* ── PANTALLA 1: elegir acción ── */}
+                {screen === 'choose' && (
+                    <div className="flex flex-col gap-3 px-5 py-5">
+                        {/* resumen rápido */}
+                        <div className="bg-slate-50 rounded-xl p-3 space-y-1.5">
+                            {items.map(item => (
+                                <div key={item.id} className="flex justify-between text-sm">
+                                    <span className="text-slate-600 truncate pr-2">{item.product?.name}</span>
+                                    <span className="font-semibold text-slate-800 shrink-0">{item.assigned_qty} unid.</span>
+                                </div>
+                            ))}
+                            <div className="border-t pt-1.5 mt-1 flex justify-between text-sm font-bold text-slate-700">
+                                <span>Total asignado</span>
+                                <span>{totalAssigned} unid.</span>
+                            </div>
                         </div>
 
-                        <h4 className="font-semibold text-slate-700 text-sm">Resumen de Devolución</h4>
+                        {/* acción principal */}
+                        <Button
+                            className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl gap-2"
+                            onClick={handleAllSold}
+                            disabled={bulkReturn.isPending}
+                        >
+                            {bulkReturn.isPending
+                                ? <Loader2 className="h-5 w-5 animate-spin" />
+                                : <><CheckCircle className="h-5 w-5" /> Todo vendido</>
+                            }
+                        </Button>
+                        <p className="text-center text-xs text-slate-400 -mt-1">No hubo ninguna devolución</p>
 
-                        <div className="border rounded-lg overflow-hidden">
-                            <table className="w-full text-sm">
-                                <thead className="bg-slate-50">
-                                    <tr className="text-xs text-slate-500 uppercase">
-                                        <th className="text-left px-3 py-2">Producto</th>
-                                        <th className="text-center px-2 py-2">Asig.</th>
-                                        <th className="text-center px-2 py-2">Dev.</th>
-                                        <th className="text-center px-2 py-2">Vend.</th>
-                                        <th className="text-right px-3 py-2">Valor</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                    {summary.map((row, i) => (
-                                        <tr key={i} className="hover:bg-slate-50">
-                                            <td className="px-3 py-2 font-medium text-slate-800">{row.name}</td>
-                                            <td className="px-2 py-2 text-center text-slate-500">{row.assigned}</td>
-                                            <td className="px-2 py-2 text-center text-yellow-600 font-medium">{row.returned}</td>
-                                            <td className="px-2 py-2 text-center text-green-600 font-bold">{row.sold}</td>
-                                            <td className="px-3 py-2 text-right font-semibold">${row.value.toLocaleString()}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                                <tfoot className="bg-slate-100 border-t-2 font-bold text-sm">
-                                    <tr>
-                                        <td className="px-3 py-2">TOTAL</td>
-                                        <td className="px-2 py-2 text-center text-slate-600">{summary.reduce((s, r) => s + r.assigned, 0)}</td>
-                                        <td className="px-2 py-2 text-center text-yellow-700">{summary.reduce((s, r) => s + r.returned, 0)}</td>
-                                        <td className="px-2 py-2 text-center text-green-700">{summary.reduce((s, r) => s + r.sold, 0)}</td>
-                                        <td className="px-3 py-2 text-right text-green-700">
-                                            ${summary.reduce((s, r) => s + r.value, 0).toLocaleString()}
-                                        </td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-
-                        <Button className="w-full" onClick={onClose}>
-                            <X className="h-4 w-4 mr-2" />
-                            Listo — Cerrar
+                        {/* acción secundaria */}
+                        <Button
+                            variant="outline"
+                            className="w-full h-12 rounded-xl text-slate-600 gap-1"
+                            onClick={() => setScreen('input')}
+                            disabled={bulkReturn.isPending}
+                        >
+                            Hubo devolución
+                            <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>
-                ) : (
-                    /* ── RETURN ENTRY SCREEN ── */
-                    <>
-                        <div className="flex-1 overflow-y-auto space-y-2 py-1">
-                            {/* Quick fill buttons */}
-                            <div className="flex gap-2 items-center mb-3">
-                                <span className="text-xs text-slate-500 mr-1">Predefinir:</span>
-                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setAll(0)}>
-                                    Todo vendido (0 ret.)
-                                </Button>
-                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
-                                    const next: Record<string, number | ''> = {}
-                                    for (const item of items) next[item.id] = item.assigned_qty
-                                    setReturnQtys(next)
-                                }}>
-                                    Todo devuelto
-                                </Button>
-                            </div>
+                )}
 
-                            {/* Per-product return inputs */}
+                {/* ── PANTALLA 2: ingresar cantidades ── */}
+                {screen === 'input' && (
+                    <>
+                        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+                            <p className="text-xs text-slate-500 mb-1">¿Cuánto devolvió de cada producto?</p>
                             {items.map(item => {
                                 const qty = returnQtys[item.id]
-                                const numQty = Number(qty) || 0
-                                const isOver = numQty > item.assigned_qty
+                                const isOver = (Number(qty) || 0) > item.assigned_qty
                                 return (
                                     <div key={item.id} className={cn(
-                                        "flex items-center gap-3 p-3 rounded-lg border",
-                                        isOver ? "border-red-300 bg-red-50" : "border-slate-200 bg-white"
+                                        "flex items-center gap-3 px-4 py-3 rounded-xl border",
+                                        isOver ? "border-red-300 bg-red-50" : "bg-white border-slate-200"
                                     )}>
                                         <div className="flex-1 min-w-0">
                                             <p className="font-medium text-sm text-slate-800 truncate">{item.product?.name}</p>
-                                            <p className="text-xs text-slate-400">Asignado: {item.assigned_qty} unid.</p>
+                                            <p className="text-xs text-slate-400">{item.assigned_qty} asignados</p>
                                         </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <Label className="text-xs text-slate-500 whitespace-nowrap">A devolver:</Label>
-                                            <Input
-                                                type="number"
-                                                min={0}
-                                                max={item.assigned_qty}
-                                                value={qty === '' ? '' : qty}
-                                                onChange={e => setReturnQtys(prev => ({
-                                                    ...prev,
-                                                    [item.id]: e.target.value === '' ? '' : Number(e.target.value)
-                                                }))}
-                                                placeholder="0"
-                                                className={cn("w-20 h-8 text-center", isOver && "border-red-400")}
-                                            />
-                                        </div>
+                                        <Input
+                                            type="number"
+                                            inputMode="numeric"
+                                            min={0}
+                                            max={item.assigned_qty}
+                                            value={qty === '' ? '' : qty}
+                                            onChange={e => setReturnQtys(prev => ({
+                                                ...prev,
+                                                [item.id]: e.target.value === '' ? '' : Number(e.target.value)
+                                            }))}
+                                            placeholder="0"
+                                            className={cn("w-20 h-11 text-center text-base shrink-0", isOver && "border-red-400")}
+                                        />
                                     </div>
                                 )
                             })}
                         </div>
 
-                        {/* Summary bar */}
-                        <div className="border-t pt-3 mt-2 space-y-1">
-                            <div className="flex justify-between text-sm text-slate-600">
-                                <span className="flex items-center gap-1"><ShoppingBag className="h-3.5 w-3.5" /> Estimado vendido:</span>
-                                <span className="font-bold text-green-600">{totalSoldEst} unid.</span>
+                        <div className="px-5 pb-5 pt-3 border-t space-y-2">
+                            <div className="flex justify-between text-sm text-slate-600 mb-1">
+                                <span>Total a devolver</span>
+                                <span className="font-bold text-orange-600">{totalToReturn} unid.</span>
                             </div>
-                            <div className="flex justify-between text-sm text-slate-600">
-                                <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Total a devolver:</span>
-                                <span className="font-bold text-yellow-600">{totalReturned} unid.</span>
+                            <Button
+                                className="w-full h-12 rounded-xl bg-orange-500 hover:bg-orange-600 font-bold"
+                                onClick={handleWithReturns}
+                                disabled={bulkReturn.isPending || hasOverLimit}
+                            >
+                                {bulkReturn.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                Confirmar devolución
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                className="w-full h-10 text-slate-400"
+                                onClick={() => setScreen('choose')}
+                                disabled={bulkReturn.isPending}
+                            >
+                                ← Volver
+                            </Button>
+                        </div>
+                    </>
+                )}
+
+                {/* ── PANTALLA 3: resumen ── */}
+                {screen === 'summary' && summary && (
+                    <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+                        <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                            <CheckCircle className="h-5 w-5 shrink-0" />
+                            <p className="text-sm font-semibold">Turno cerrado exitosamente</p>
+                        </div>
+
+                        <div className="rounded-xl border overflow-hidden">
+                            <div className="grid grid-cols-4 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                <span className="col-span-1">Producto</span>
+                                <span className="text-center">Asig.</span>
+                                <span className="text-center">Dev.</span>
+                                <span className="text-center">Vend.</span>
+                            </div>
+                            {summary.map((row, i) => (
+                                <div key={i} className="grid grid-cols-4 px-3 py-2.5 border-t text-sm items-center">
+                                    <span className="font-medium text-slate-800 truncate pr-1">{row.name}</span>
+                                    <span className="text-center text-slate-500">{row.assigned}</span>
+                                    <span className="text-center text-yellow-600 font-medium">{row.returned}</span>
+                                    <span className="text-center text-green-600 font-bold">{row.sold}</span>
+                                </div>
+                            ))}
+                            <div className="grid grid-cols-4 px-3 py-2.5 border-t bg-slate-50 text-sm font-bold">
+                                <span className="text-slate-700">Total</span>
+                                <span className="text-center text-slate-600">{summary.reduce((s, r) => s + r.assigned, 0)}</span>
+                                <span className="text-center text-yellow-700">{summary.reduce((s, r) => s + r.returned, 0)}</span>
+                                <span className="text-center text-green-700">{summary.reduce((s, r) => s + r.sold, 0)}</span>
                             </div>
                         </div>
 
-                        <DialogFooter>
-                            <Button variant="outline" onClick={onClose} disabled={bulkReturn.isPending}>
-                                Cancelar
-                            </Button>
-                            <Button
-                                className="bg-orange-500 hover:bg-orange-600"
-                                onClick={handleConfirm}
-                                disabled={bulkReturn.isPending || items.some(i => (Number(returnQtys[i.id]) || 0) > i.assigned_qty)}
-                            >
-                                {bulkReturn.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                                Confirmar Devolución
-                            </Button>
-                        </DialogFooter>
-                    </>
+                        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex justify-between items-center">
+                            <span className="text-sm font-medium text-green-700">Valor vendido estimado</span>
+                            <span className="text-lg font-bold text-green-700">
+                                ${summary.reduce((s, r) => s + r.value, 0).toLocaleString()}
+                            </span>
+                        </div>
+
+                        <Button className="w-full h-12 rounded-xl font-bold" onClick={onClose}>
+                            Listo
+                        </Button>
+                    </div>
                 )}
             </DialogContent>
         </Dialog>

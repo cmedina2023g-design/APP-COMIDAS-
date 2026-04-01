@@ -30,7 +30,7 @@ export function useActiveSessions() {
             if (error) throw error
             return data as (UserSession & { user: Profile })[]
         },
-        refetchInterval: 10000 // Refresh every 10 seconds
+        refetchInterval: 30000 // Refresh every 30 seconds
     })
 }
 
