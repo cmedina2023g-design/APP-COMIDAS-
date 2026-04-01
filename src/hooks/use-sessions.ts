@@ -407,12 +407,10 @@ export function useReturnInventory() {
             assignment_id: string
             returned_qty: number
         }) => {
-            // Call the atomic RPC function
             const { data, error } = await supabase.rpc('return_runner_inventory', {
                 p_assignment_id: params.assignment_id,
                 p_returned_qty: params.returned_qty
             })
-
             if (error) throw error
             return data
         },
@@ -427,6 +425,29 @@ export function useReturnInventory() {
     })
 }
 
+export function useBulkReturnInventory() {
+    const supabase = createClient()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async (returns: { assignment_id: string; returned_qty: number }[]) => {
+            const { data, error } = await supabase.rpc('bulk_return_runner_inventory', {
+                p_returns: returns
+            })
+            if (error) throw error
+            return data as { success: boolean; items: any[] }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['runner-inventory'] })
+            queryClient.invalidateQueries({ queryKey: ['runner-summary'] })
+            queryClient.invalidateQueries({ queryKey: ['ingredients'] })
+        },
+        onError: (err: any) => {
+            toast.error('Error al registrar devoluciones', { description: err.message })
+        }
+    })
+}
+
 export function useRunnerSummary() {
     const supabase = createClient()
     return useQuery({
@@ -435,7 +456,8 @@ export function useRunnerSummary() {
             const { organization_id } = await getOrCreateProfile(supabase)
             const today = new Date().toISOString().split('T')[0]
 
-            const { data, error } = await supabase
+            // Fetch inventory assignments summary
+            const { data: inventoryData, error: invErr } = await supabase
                 .from('runner_inventory_assignments')
                 .select(`
                     runner_id,
@@ -449,10 +471,28 @@ export function useRunnerSummary() {
                 .eq('organization_id', organization_id)
                 .eq('assignment_date', today)
 
-            if (error) throw error
+            if (invErr) throw invErr
 
-            // Group by runner
-            const summary = data.reduce((acc: any, item: any) => {
+            // Fetch actual POS sales by runner for today
+            const { data: salesData, error: salesErr } = await supabase
+                .from('sales')
+                .select('seller_id, total')
+                .eq('organization_id', organization_id)
+                .eq('status', 'CONFIRMED')
+                .gte('created_at', `${today}T00:00:00`)
+                .lte('created_at', `${today}T23:59:59`)
+
+            if (salesErr) throw salesErr
+
+            // Build POS sales map per runner
+            const posSalesByRunner: Record<string, number> = {}
+            for (const sale of salesData || []) {
+                if (!sale.seller_id) continue
+                posSalesByRunner[sale.seller_id] = (posSalesByRunner[sale.seller_id] || 0) + (sale.total || 0)
+            }
+
+            // Group inventory by runner
+            const summary = (inventoryData || []).reduce((acc: any, item: any) => {
                 const runnerId = item.runner_id
                 if (!acc[runnerId]) {
                     acc[runnerId] = {
@@ -460,18 +500,24 @@ export function useRunnerSummary() {
                         runner_name: item.runner?.full_name || 'Sin nombre',
                         total_assigned: 0,
                         total_returned: 0,
-                        total_sold: 0,
-                        total_value: 0,
+                        total_sold_inv: 0,   // from inventory math
+                        total_value_inv: 0,  // estimated from inventory
+                        total_pos_sales: 0,  // real POS sales
                         active_assignments: 0
                     }
                 }
                 acc[runnerId].total_assigned += item.assigned_qty
                 acc[runnerId].total_returned += item.returned_qty
-                acc[runnerId].total_sold += item.sold_qty
-                acc[runnerId].total_value += item.sold_qty * (item.product?.price || 0)
+                acc[runnerId].total_sold_inv += item.sold_qty
+                acc[runnerId].total_value_inv += item.sold_qty * (item.product?.price || 0)
                 if (item.status === 'active') acc[runnerId].active_assignments++
                 return acc
             }, {})
+
+            // Merge POS sales into summary
+            for (const runnerId of Object.keys(summary)) {
+                summary[runnerId].total_pos_sales = posSalesByRunner[runnerId] || 0
+            }
 
             return Object.values(summary)
         },
