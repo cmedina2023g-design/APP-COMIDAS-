@@ -448,6 +448,32 @@ export function useBulkReturnInventory() {
     })
 }
 
+export function useAdminEditClosedReturns() {
+    const supabase = createClient()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async (updates: { assignment_id: string; new_returned_qty: number }[]) => {
+            const { organization_id } = await getOrCreateProfile(supabase)
+            const { data, error } = await supabase.rpc('admin_edit_closed_runner_inventory', {
+                p_organization_id: organization_id,
+                p_admin_qty_updates: updates
+            })
+            if (error) throw error
+            return data as { success: boolean }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['runner-inventory'] })
+            queryClient.invalidateQueries({ queryKey: ['runner-summary'] })
+            queryClient.invalidateQueries({ queryKey: ['ingredients'] })
+            toast.success('Devoluciones editadas y stock actualizado')
+        },
+        onError: (err: any) => {
+            toast.error('Error al editar devoluciones', { description: err.message })
+        }
+    })
+}
+
 export function useRunnerSummary() {
     const supabase = createClient()
     return useQuery({

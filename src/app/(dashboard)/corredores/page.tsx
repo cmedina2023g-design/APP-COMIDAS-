@@ -19,7 +19,8 @@ import {
     CheckCircle,
     RotateCcw,
     TrendingUp,
-    Users
+    Users,
+    Pencil
 } from 'lucide-react'
 import Link from 'next/link'
 import {
@@ -28,9 +29,11 @@ import {
     useAssignInventory,
     useBulkReturnInventory,
     useRunnerSummary,
-    useShifts
+    useShifts,
+    useAdminEditClosedReturns
 } from '@/hooks/use-sessions'
 import { useProducts } from '@/hooks/use-products'
+import { useCurrentProfile } from '@/hooks/use-profiles'
 import { cn } from '@/lib/utils'
 
 // ─────────────────────────────────────────────
@@ -39,8 +42,10 @@ import { cn } from '@/lib/utils'
 export default function CorredoresPage() {
     const { data: inventory, isLoading, refetch } = useRunnerInventory()
     const { data: summary } = useRunnerSummary()
+    const { data: currentProfile } = useCurrentProfile()
     const [assignOpen, setAssignOpen] = useState(false)
     const [closingRunner, setClosingRunner] = useState<{ id: string; name: string } | null>(null)
+    const [editingRunner, setEditingRunner] = useState<{ id: string; name: string } | null>(null)
     const [expandedRunners, setExpandedRunners] = useState<Record<string, boolean>>({})
 
     // Group inventory by runner, then aggregate duplicate products
@@ -232,6 +237,20 @@ export default function CorredoresPage() {
                                                     Cerrar Turno
                                                 </Button>
                                             )}
+                                            {!hasActive && currentProfile?.role === 'ADMIN' && items.length > 0 && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="shrink-0 text-slate-500 hover:text-orange-600 hover:border-orange-200"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setEditingRunner({ id: runnerId, name: runner?.full_name || 'Corredor' })
+                                                    }}
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                                                    Editar Devolución
+                                                </Button>
+                                            )}
                                         </div>
 
                                         {/* Items table */}
@@ -294,6 +313,16 @@ export default function CorredoresPage() {
                     runnerName={closingRunner.name}
                     items={(byRunner[closingRunner.id]?.items || []).filter(i => i.status === 'active')}
                     onClose={() => setClosingRunner(null)}
+                />
+            )}
+
+            {/* Admin Edit Return Modal */}
+            {editingRunner && (
+                <AdminEditReturnModal
+                    runnerId={editingRunner.id}
+                    runnerName={editingRunner.name}
+                    items={byRunner[editingRunner.id]?.items || []}
+                    onClose={() => setEditingRunner(null)}
                 />
             )}
         </div>
@@ -393,7 +422,8 @@ function BulkReturnModal({
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="max-w-sm w-full max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl">
-
+                <DialogTitle className="sr-only">Cerrar Turno</DialogTitle>
+                
                 {/* Header */}
                 <div className="px-5 pt-5 pb-4 border-b">
                     <div className="flex items-center gap-2">
@@ -549,6 +579,137 @@ function BulkReturnModal({
                         </Button>
                     </div>
                 )}
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+// ─────────────────────────────────────────────
+// Admin Edit Return Modal (Corregir Turno Cerrado)
+// ─────────────────────────────────────────────
+function AdminEditReturnModal({
+    runnerId: _runnerId,
+    runnerName,
+    items,
+    onClose
+}: {
+    runnerId: string
+    runnerName: string
+    items: BulkItem[]
+    onClose: () => void
+}) {
+    const adminEdit = useAdminEditClosedReturns()
+    const [returnQtys, setReturnQtys] = useState<Record<string, number | ''>>(() =>
+        Object.fromEntries(items.map(i => [i.id, i.returned_qty]))
+    )
+
+    const hasChanges = items.some(i => (Number(returnQtys[i.id]) || 0) !== i.returned_qty)
+    const hasOverLimit = items.some(i => (Number(returnQtys[i.id]) || 0) > i.assigned_qty)
+
+    // Build the RPC payload distributing new qty across sub-assignments
+    const buildPayload = (qtys: Record<string, number>) => {
+        const updates: { assignment_id: string; new_returned_qty: number }[] = []
+        for (const item of items) {
+            const totalTargetReturn = qtys[item.id] ?? 0
+            const subIds = item._ids || [{ id: item.id, assigned_qty: item.assigned_qty }]
+            let remaining = totalTargetReturn
+            for (const sub of subIds) {
+                const give = Math.min(remaining, sub.assigned_qty)
+                updates.push({ assignment_id: sub.id, new_returned_qty: give })
+                remaining -= give
+                if (remaining <= 0) break
+            }
+            // para el resto que se quedan en 0
+            for (const sub of subIds) {
+                if (!updates.find(u => u.assignment_id === sub.id)) {
+                    updates.push({ assignment_id: sub.id, new_returned_qty: 0 })
+                }
+            }
+        }
+        return updates
+    }
+
+    const handleSave = async () => {
+        const qtys = Object.fromEntries(items.map(i => [i.id, Number(returnQtys[i.id]) || 0]))
+        const payload = buildPayload(qtys)
+        const result = await adminEdit.mutateAsync(payload)
+        if (result?.success) {
+            onClose()
+        }
+    }
+
+    return (
+        <Dialog open onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="max-w-sm w-full max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl">
+                <DialogTitle className="sr-only">Corregir Devolución (Admin)</DialogTitle>
+                
+                {/* Header */}
+                <div className="px-5 pt-5 pb-4 border-b bg-slate-900">
+                    <div className="flex items-center gap-2">
+                        <Pencil className="h-4 w-4 text-orange-400 shrink-0" />
+                        <span className="font-bold text-white">Corregir Devolución (Admin)</span>
+                    </div>
+                    <p className="text-sm text-slate-400 mt-0.5 pl-6">{runnerName}</p>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+                    <p className="text-xs text-slate-500 mb-2 bg-blue-50 text-blue-700 p-2 rounded-md">
+                        Esta acción recalculará automáticamente el inventario del restaurante y el total vendido del corredor.
+                    </p>
+                    
+                    {items.map(item => {
+                        const qty = returnQtys[item.id]
+                        const isOver = (Number(qty) || 0) > item.assigned_qty
+                        const originalQty = item.returned_qty
+                        const currentVal = Number(qty) || 0
+                        const changed = currentVal !== originalQty
+
+                        return (
+                            <div key={item.id} className={cn(
+                                "flex items-center gap-3 px-4 py-3 rounded-xl border",
+                                isOver ? "border-red-300 bg-red-50" : changed ? "border-orange-300 bg-orange-50" : "bg-white border-slate-200"
+                            )}>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm text-slate-800 truncate">{item.product?.name}</p>
+                                    <p className="text-xs text-slate-400">
+                                        Asignado: {item.assigned_qty} | Orig: {item.returned_qty}
+                                    </p>
+                                </div>
+                                <div className="shrink-0 flex items-center gap-2">
+                                    <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        min={0}
+                                        max={item.assigned_qty}
+                                        value={qty === '' ? '' : qty}
+                                        onChange={e => setReturnQtys(prev => ({
+                                            ...prev,
+                                            [item.id]: e.target.value === '' ? '' : Number(e.target.value)
+                                        }))}
+                                        className={cn("w-20 h-11 text-center text-base font-bold", isOver && "border-red-400", changed && "text-orange-600")}
+                                    />
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+
+                <div className="px-5 pb-5 pt-3 border-t bg-slate-50 space-y-2">
+                    <div className="flex justify-between text-sm text-slate-600 mb-2">
+                        <span>Total de cambios</span>
+                        <span className={cn("font-bold", hasChanges ? "text-orange-600" : "text-slate-400")}>
+                            {items.filter(i => (Number(returnQtys[i.id]) || 0) !== i.returned_qty).length} productos editados
+                        </span>
+                    </div>
+                    <Button
+                        className="w-full h-12 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold"
+                        onClick={handleSave}
+                        disabled={!hasChanges || hasOverLimit || adminEdit.isPending}
+                    >
+                        {adminEdit.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                        Confirmar y Ajustar Inventario
+                    </Button>
+                </div>
             </DialogContent>
         </Dialog>
     )
