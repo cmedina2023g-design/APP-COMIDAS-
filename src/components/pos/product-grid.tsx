@@ -24,7 +24,7 @@ const categoryColors: Record<string, string> = {
     'Salchipapas para compartir': 'bg-teal-500',
 }
 
-export function ProductGrid({ products, isRunner }: ProductGridProps) {
+export const ProductGrid = React.memo(function ProductGrid({ products, isRunner }: ProductGridProps) {
     const addItem = useCartStore(state => state.addItem)
     const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null)
     const [modalOpen, setModalOpen] = React.useState(false)
@@ -133,5 +133,5 @@ export function ProductGrid({ products, isRunner }: ProductGridProps) {
             />
         </>
     )
-}
+})
 

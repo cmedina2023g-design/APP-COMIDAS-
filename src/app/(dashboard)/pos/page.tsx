@@ -42,33 +42,40 @@ export default function POSPage() {
     ]
 
     // Derive and sort categories by custom order
-    const allCategories = Array.from(new Set(products?.map(p => p.category).filter(Boolean) as string[]))
-    const categories = allCategories.sort((a, b) => {
-        const indexA = categoryOrder.indexOf(a)
-        const indexB = categoryOrder.indexOf(b)
-        const posA = indexA === -1 ? 999 : indexA
-        const posB = indexB === -1 ? 999 : indexB
-        return posA - posB
-    })
+    const categories = useMemo(() => {
+        const all = Array.from(new Set(products?.map(p => p.category).filter(Boolean) as string[]))
+        return all.sort((a, b) => {
+            const indexA = categoryOrder.indexOf(a)
+            const indexB = categoryOrder.indexOf(b)
+            const posA = indexA === -1 ? 999 : indexA
+            const posB = indexB === -1 ? 999 : indexB
+            return posA - posB
+        })
+    }, [products, categoryOrder])
 
     // Get subcategories for selected category - simple version
-    const subcategories: string[] = []
-    if (selectedCategory && products) {
-        const subcatSet = new Set<string>()
-        products.forEach(p => {
-            if (p.category === selectedCategory && p.subcategory) {
-                subcatSet.add(p.subcategory)
-            }
-        })
-        subcategories.push(...Array.from(subcatSet))
-    }
+    const subcategories = useMemo(() => {
+        const subs: string[] = []
+        if (selectedCategory && products) {
+            const subcatSet = new Set<string>()
+            products.forEach(p => {
+                if (p.category === selectedCategory && p.subcategory) {
+                    subcatSet.add(p.subcategory)
+                }
+            })
+            subs.push(...Array.from(subcatSet))
+        }
+        return subs
+    }, [selectedCategory, products])
 
-    const filteredProducts = products?.filter(p => {
-        const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
-        const matchCat = selectedCategory ? p.category === selectedCategory : true
-        const matchSubcat = selectedSubcategory ? p.subcategory === selectedSubcategory : true
-        return matchSearch && matchCat && matchSubcat && p.active
-    }) || []
+    const filteredProducts = useMemo(() => {
+        return products?.filter(p => {
+            const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
+            const matchCat = selectedCategory ? p.category === selectedCategory : true
+            const matchSubcat = selectedSubcategory ? p.subcategory === selectedSubcategory : true
+            return matchSearch && matchCat && matchSubcat && p.active
+        }) || []
+    }, [products, search, selectedCategory, selectedSubcategory])
 
     return (
         <div className="flex flex-col min-h-screen md:h-screen bg-slate-100 dark:bg-slate-950">
