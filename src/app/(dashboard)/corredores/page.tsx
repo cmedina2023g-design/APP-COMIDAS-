@@ -45,15 +45,38 @@ export default function CorredoresPage() {
     const [closingRunner, setClosingRunner] = useState<{ id: string; name: string } | null>(null)
     const [expandedRunners, setExpandedRunners] = useState<Record<string, boolean>>({})
 
-    // Group inventory by runner
+    // Group inventory by runner, then aggregate duplicate products
     const byRunner = useMemo(() => {
-        const groups: Record<string, { runner: any; items: any[] }> = {}
+        const groups: Record<string, { runner: any; items: any[]; rawItems: any[] }> = {}
         for (const item of inventory || []) {
             const rid = item.runner?.id || item.runner_id || 'unknown'
             if (!groups[rid]) {
-                groups[rid] = { runner: item.runner, items: [] }
+                groups[rid] = { runner: item.runner, items: [], rawItems: [] }
             }
-            groups[rid].items.push(item)
+            groups[rid].rawItems.push(item)
+        }
+        // Aggregate products per runner
+        for (const rid of Object.keys(groups)) {
+            const productMap: Record<string, any> = {}
+            for (const item of groups[rid].rawItems) {
+                const pid = item.product?.id || item.product_id
+                if (!productMap[pid]) {
+                    productMap[pid] = {
+                        ...item,
+                        assigned_qty: 0,
+                        returned_qty: 0,
+                        sold_qty: 0,
+                        _ids: [],          // all assignment IDs for bulk return
+                        status: 'closed'   // 'active' if any sub-item is active
+                    }
+                }
+                productMap[pid].assigned_qty += item.assigned_qty || 0
+                productMap[pid].returned_qty += item.returned_qty || 0
+                productMap[pid].sold_qty += item.sold_qty || 0
+                productMap[pid]._ids.push({ id: item.id, assigned_qty: item.assigned_qty })
+                if (item.status === 'active') productMap[pid].status = 'active'
+            }
+            groups[rid].items = Object.values(productMap).sort((a, b) => b.assigned_qty - a.assigned_qty)
         }
         return groups
     }, [inventory])
@@ -90,7 +113,16 @@ export default function CorredoresPage() {
             {summary && (summary as any[]).length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     {(summary as any[]).map((runner: any) => (
-                        <Card key={runner.runner_id} className="border-t-4 border-t-blue-500">
+                        <Card
+                            key={runner.runner_id}
+                            className="border-t-4 border-t-blue-500 cursor-pointer hover:shadow-md transition-shadow"
+                            onClick={() => {
+                                setExpandedRunners(prev => ({ ...prev, [runner.runner_id]: true }))
+                                setTimeout(() => {
+                                    document.getElementById(`runner-${runner.runner_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                }, 50)
+                            }}
+                        >
                             <CardContent className="pt-4 pb-3">
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-2">
@@ -162,12 +194,12 @@ export default function CorredoresPage() {
                     ) : (
                         <div className="space-y-3">
                             {Object.entries(byRunner).map(([runnerId, { runner, items }]) => {
-                                const isExpanded = expandedRunners[runnerId] ?? true
+                                const isExpanded = expandedRunners[runnerId] ?? false
                                 const hasActive = items.some(i => i.status === 'active')
                                 const runnerSummary = getSummaryForRunner(runnerId)
 
                                 return (
-                                    <div key={runnerId} className="border rounded-xl overflow-hidden">
+                                    <div key={runnerId} id={`runner-${runnerId}`} className="border rounded-xl overflow-hidden">
                                         {/* Runner header row */}
                                         <div
                                             className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors"
@@ -278,6 +310,7 @@ type BulkItem = {
     product: { name: string; price: number }
     assigned_qty: number
     returned_qty: number
+    _ids?: { id: string; assigned_qty: number }[]  // aggregated sub-assignments
 }
 
 type ReturnSummaryItem = {
@@ -320,31 +353,53 @@ function BulkReturnModal({
     }
 
     const handleConfirm = async () => {
-        const returns = items.map(item => ({
-            assignment_id: item.id,
-            returned_qty: Number(returnQtys[item.id]) || 0
-        }))
+        // Distribute returned qty across sub-assignments (oldest-first fill)
+        const returns: { assignment_id: string; returned_qty: number }[] = []
+        for (const item of items) {
+            const totalToReturn = Number(returnQtys[item.id]) || 0
+            const subIds = item._ids || [{ id: item.id, assigned_qty: item.assigned_qty }]
+            let remaining = totalToReturn
+            for (const sub of subIds) {
+                const give = Math.min(remaining, sub.assigned_qty)
+                returns.push({ assignment_id: sub.id, returned_qty: give })
+                remaining -= give
+                if (remaining <= 0) break
+            }
+            // Any sub-assignments not covered get 0
+            for (const sub of subIds) {
+                if (!returns.find(r => r.assignment_id === sub.id)) {
+                    returns.push({ assignment_id: sub.id, returned_qty: 0 })
+                }
+            }
+        }
 
         const result = await bulkReturn.mutateAsync(returns)
 
         if (result?.success) {
-            // Build summary from result items
-            const summaryItems: ReturnSummaryItem[] = (result.items || []).map((ri: any) => {
-                const item = items.find(i => i.id === ri.assignment_id)
-                return {
-                    name: item?.product?.name || '—',
-                    assigned: ri.assigned_qty,
-                    returned: ri.returned_qty,
-                    sold: ri.sold_qty,
-                    value: ri.sold_qty * (item?.product?.price || 0)
+            // Merge result items by product name
+            const productSummary: Record<string, ReturnSummaryItem> = {}
+            for (const ri of result.items || []) {
+                const item = items.find(i =>
+                    (i._ids || [{ id: i.id }]).some((s: any) => s.id === ri.assignment_id)
+                )
+                const name = item?.product?.name || '—'
+                const price = item?.product?.price || 0
+                if (!productSummary[name]) {
+                    productSummary[name] = { name, assigned: 0, returned: 0, sold: 0, value: 0 }
                 }
-            })
-            setSummary(summaryItems)
+                productSummary[name].assigned += ri.assigned_qty
+                productSummary[name].returned += ri.returned_qty
+                productSummary[name].sold += ri.sold_qty
+                productSummary[name].value += ri.sold_qty * price
+            }
+            setSummary(Object.values(productSummary))
         }
     }
 
-    const totalReturned = items.reduce((s, item) => s + (Number(returnQtys[item.id]) || 0), 0)
-    const totalSoldEst = items.reduce((s, item) => s + (item.assigned_qty - (Number(returnQtys[item.id]) || 0)), 0)
+    // Use product id (first _ids entry or item.id) as key
+    const itemKey = (item: BulkItem) => item._ids?.[0]?.id || item.id
+    const totalReturned = items.reduce((s, item) => s + (Number(returnQtys[itemKey(item)]) || 0), 0)
+    const totalSoldEst = items.reduce((s, item) => s + (item.assigned_qty - (Number(returnQtys[itemKey(item)]) || 0)), 0)
 
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>

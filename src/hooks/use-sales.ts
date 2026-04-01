@@ -80,10 +80,10 @@ export function useCreateSale() {
 import { startOfDay, endOfDay, format } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 
-export function useDailyProductSummary() {
+export function useDailyProductSummary(sellerId?: string | null) {
     const supabase = createClient()
     return useQuery({
-        queryKey: ['daily-product-summary'],
+        queryKey: ['daily-product-summary', sellerId],
         queryFn: async () => {
             const { organization_id } = await getOrCreateProfile(supabase)
 
@@ -94,7 +94,7 @@ export function useDailyProductSummary() {
             const todayEnd = endOfDay(toZonedTime(now, timezone)).toISOString()
 
             // Fetch sale items with timestamps
-            const { data, error } = await supabase
+            let query = supabase
                 .from('sale_items')
                 .select(`
                     qty,
@@ -103,6 +103,7 @@ export function useDailyProductSummary() {
                         id,
                         created_at, 
                         organization_id, 
+                        seller_id,
                         payment_method:payment_methods(name),
                         sale_payments(payment_method:payment_methods(name))
                     )
@@ -110,6 +111,12 @@ export function useDailyProductSummary() {
                 .eq('sale.organization_id', organization_id)
                 .gte('sale.created_at', todayStart)
                 .lte('sale.created_at', todayEnd)
+
+            if (sellerId) {
+                query = query.eq('sale.seller_id', sellerId)
+            }
+
+            const { data, error } = await query
 
             if (error) throw error
 

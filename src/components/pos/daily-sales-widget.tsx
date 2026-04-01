@@ -1,12 +1,14 @@
 'use client'
 
 import { useDailyProductSummary } from '@/hooks/use-sales'
+import { useCurrentProfile } from '@/hooks/use-profiles'
 import { Loader2, ScrollText, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
 export function DailySalesWidget() {
-    const { data: summary, isLoading, refetch } = useDailyProductSummary()
+    const { data: currentProfile } = useCurrentProfile()
+    const { data: summary, isLoading, refetch } = useDailyProductSummary(currentProfile?.id)
 
     return (
         <Card className="flex flex-col h-full shadow-md border-slate-200 bg-white">

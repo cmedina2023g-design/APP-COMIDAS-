@@ -62,19 +62,42 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
     // State for Modifiers
     const [modifierGroups, setModifierGroups] = useState<any[]>([])
 
+    // 1. Immediate population of basic fields from productToEdit (already available)
     useEffect(() => {
         if (open) {
-            // Reset state when opening
             setModifierGroups([])
+            
+            if (productToEdit) {
+                setName(productToEdit.name)
+                setPrice(productToEdit.price.toString())
+                setCategory(productToEdit.category || '')
+                setSubcategory(productToEdit.subcategory || '')
+                setImageUrl(productToEdit.image_url || '')
+                setIsCustomCategory(false)
+            } else {
+                setName('')
+                setPrice('')
+                setCategory('')
+                setSubcategory('')
+                setImageUrl('')
+                setIsCustomCategory(false)
+                setRunnerPrices([])
+                setShiftPrices([])
+                setRecipeItems([])
+            }
         }
+    }, [productToEdit, open])
 
-        if (productToEdit && fullProduct && open) {
+    // 2. Population of complex fields when fullProduct (with recipes/prices) is loaded
+    useEffect(() => {
+        if (open && productToEdit && fullProduct) {
+            // Update name/price/category just in case they differ (unlikely but safe)
             setName(fullProduct.name)
             setPrice(fullProduct.price.toString())
             setCategory(fullProduct.category || '')
             setSubcategory(fullProduct.subcategory || '')
             setImageUrl(fullProduct.image_url || '')
-            setIsCustomCategory(false)
+            
             setRunnerPrices(fullProduct.runner_prices?.map((rp: any) => ({
                 runner_id: rp.runner_id,
                 price: rp.price
@@ -88,19 +111,8 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                 qty: r.qty
             })) || [])
             setModifierGroups(fullProduct.modifier_groups || [])
-        } else if (!productToEdit && open) {
-            setName('')
-            setPrice('')
-            setRunnerPrices([])
-            setShiftPrices([])
-            setCategory('')
-            setSubcategory('')
-            setImageUrl('')
-            setRecipeItems([])
-            setIsCustomCategory(false)
-            setModifierGroups([])
         }
-    }, [productToEdit, fullProduct, open])
+    }, [fullProduct, open, productToEdit])
 
     const addIngredient = () => {
         if (!selectedIngredient || !selectedQty) return
@@ -259,8 +271,8 @@ export function ProductDialog({ productToEdit, open, onOpenChange }: ProductDial
                                         )}
                                     </div>
 
-                                    {/* Subcategory field */}
-                                    {category && subcategorySuggestions[category] && (
+                                    {/* Subcategory field - show if category has suggestions OR if it already has a subcategory */}
+                                    {(category && (subcategorySuggestions[category] || subcategory)) && (
                                         <div className="space-y-2">
                                             <Label>Subcategoría (opcional)</Label>
                                             <div className="relative">

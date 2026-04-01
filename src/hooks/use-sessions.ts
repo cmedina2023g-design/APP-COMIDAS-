@@ -335,7 +335,7 @@ export function useRunnerInventory(runnerId?: string) {
         queryKey: ['runner-inventory', runnerId],
         queryFn: async () => {
             const { organization_id } = await getOrCreateProfile(supabase)
-            const today = new Date().toISOString().split('T')[0]
+            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
             let query = supabase
                 .from('runner_inventory_assignments')
@@ -454,7 +454,7 @@ export function useRunnerSummary() {
         queryKey: ['runner-summary'],
         queryFn: async () => {
             const { organization_id } = await getOrCreateProfile(supabase)
-            const today = new Date().toISOString().split('T')[0]
+            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
             // Fetch inventory assignments summary
             const { data: inventoryData, error: invErr } = await supabase
