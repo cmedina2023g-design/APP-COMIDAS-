@@ -155,9 +155,9 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
 
     const downloadTemplate = () => {
         const template = [
-            { Ingrediente: 'Papas', Cantidad: 5000, 'Precio Total': 10000, Categoría: 'Verduras', Unidad: 'g' },
-            { Ingrediente: 'Pollo', Cantidad: 3000, 'Precio Total': 30000, Categoría: 'Proteínas', Unidad: 'g' },
-            { Ingrediente: 'Aceite', Cantidad: 2000, 'Precio Total': 15000, Categoría: 'Aceites', Unidad: 'ml' }
+            { Ingrediente: 'Pan Perro', Cantidad: 50 },
+            { Ingrediente: 'Carne Hamburguesa', Cantidad: 30 },
+            { Ingrediente: 'Queso Tajado', Cantidad: 25 }
         ]
 
         const worksheet = utils.json_to_sheet(template)
@@ -201,10 +201,10 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
                     <Alert>
                         <Info className="h-4 w-4" />
                         <AlertDescription>
-                            <div className="font-semibold mb-1">Formato simple:</div>
-                            <p className="text-xs">Ingrediente | Cantidad | Precio Total | Categoría | Unidad</p>
-                            <p className="text-xs text-muted-foreground mt-1">(Categoría y Unidad son opcionales - por defecto: General, g)</p>
-                            <p className="text-xs mt-1">Si el ingrediente no existe, se crea automáticamente ✨</p>
+                            <div className="font-semibold mb-1">El formato del Excel es súper fácil:</div>
+                            <p className="text-sm font-bold text-blue-700">Ingrediente | Cantidad</p>
+                            <p className="text-xs text-muted-foreground mt-2">Solo estas dos columnas. El sistema buscará el ingrediente por nombre para ajustarle la cantidad que escribas en el Excel.</p>
+                            <p className="text-xs mt-1 text-slate-500">Si deseas ser más detallista, puedes agregar columnas opcionales llamadas: Precio Total, Categoría, y Unidad.</p>
                         </AlertDescription>
                     </Alert>
 
@@ -270,14 +270,18 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
                                                 <td className="p-2 text-right">{row.quantity.toLocaleString()}</td>
                                                 <td className="p-2 text-center">
                                                     <Badge variant="secondary" className="text-xs">
-                                                        {row.unit || 'g'}
+                                                        {row.unit || '-'}
                                                     </Badge>
                                                 </td>
-                                                <td className="p-2 text-right font-semibold">${row.total_price.toLocaleString()}</td>
+                                                <td className="p-2 text-right font-semibold">
+                                                    {row.total_price > 0 ? `$${row.total_price.toLocaleString()}` : '-'}
+                                                </td>
                                                 <td className="p-2">
-                                                    <Badge variant="outline" className="text-xs">
-                                                        {row.category || 'General'}
-                                                    </Badge>
+                                                    {row.category ? (
+                                                        <Badge variant="outline" className="text-xs">
+                                                            {row.category}
+                                                        </Badge>
+                                                    ) : '-'}
                                                 </td>
                                             </tr>
                                         ))}
