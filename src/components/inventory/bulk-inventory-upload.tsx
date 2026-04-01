@@ -4,20 +4,35 @@ import React, { useState, useMemo } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, Info, ClipboardList, Search } from 'lucide-react'
+import {
+    Upload, Download, FileSpreadsheet, AlertCircle,
+    CheckCircle2, Info, ClipboardList, Search, Save, RefreshCw, X, Plus, ChevronUp
+} from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { read, utils, write } from 'xlsx'
 import { createClient } from '@/lib/supabase/client'
 import { getOrCreateProfile } from '@/lib/auth-helpers'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Ingredient } from '@/lib/types'
 
-type ParsedRow = {
+// ── Types ──────────────────────────────────────────────────────────────────
+type IngredientRow = {
+    id: string
+    name: string
+    unit: string
+    category: string
+    stock: number        // stock actual en BD (columna: stock)
+    cost_unit: number    // precio/unidad en BD (columna: cost_unit)
+    newStock: string
+    newCostUnit: string
+}
+
+type ParsedExcelRow = {
     name: string
     quantity: number
-    total_price: number
+    cost_unit: number
     category?: string
     unit?: string
     rowNumber: number
@@ -31,40 +46,36 @@ type UploadResult = {
     error_message: string | null
 }
 
-type InAppCountRow = {
-    id: string
-    name: string
-    unit: string
-    category: string
-    currentQty: number
-    newQty: string // string para edición
-}
+// ══════════════════════════════════════════════════════════════════════════
+// SUB-MODAL: Conteo en App (pantalla completa)
+// ══════════════════════════════════════════════════════════════════════════
+const COMMON_UNITS = ['g', 'kg', 'ml', 'L', 'und', 'lb', 'oz', 'paq', 'caja', 'rollo']
 
-export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
+function InAppCountModal({ onSuccess }: { onSuccess?: () => void }) {
     const [open, setOpen] = useState(false)
-    const [tab, setTab] = useState<'excel' | 'app'>('app')
-
-    // Excel tab state
-    const [file, setFile] = useState<File | null>(null)
-    const [parsedData, setParsedData] = useState<ParsedRow[]>([])
-    const [validationErrors, setValidationErrors] = useState<string[]>([])
-    const [uploading, setUploading] = useState(false)
-    const [results, setResults] = useState<UploadResult[]>([])
-    const [downloadingTemplate, setDownloadingTemplate] = useState(false)
-
-    // In-app count state
-    const [ingredients, setIngredients] = useState<InAppCountRow[]>([])
-    const [loadingIngredients, setLoadingIngredients] = useState(false)
+    const [ingredients, setIngredients] = useState<IngredientRow[]>([])
+    const [loading, setLoading] = useState(false)
+    const [saving, setSaving] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedCategory, setSelectedCategory] = useState<string>('Todos')
-    const [savingCount, setSavingCount] = useState(false)
+
+    // ── New ingredient form ─────────────────────────────────────────────
+    const [showAddForm, setShowAddForm] = useState(false)
+    const [creatingIngredient, setCreatingIngredient] = useState(false)
+    const [newIng, setNewIng] = useState({
+        name: '',
+        unit: 'und',
+        category: '',
+        stock: '',
+        cost_unit: '',
+    })
 
     const categories = useMemo(() => {
         const cats = Array.from(new Set(ingredients.map(i => i.category).filter(Boolean)))
         return ['Todos', ...cats.sort()]
     }, [ingredients])
 
-    const filteredIngredients = useMemo(() => {
+    const filtered = useMemo(() => {
         return ingredients.filter(i => {
             const matchSearch = !searchQuery || i.name.toLowerCase().includes(searchQuery.toLowerCase())
             const matchCat = selectedCategory === 'Todos' || i.category === selectedCategory
@@ -73,16 +84,17 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
     }, [ingredients, searchQuery, selectedCategory])
 
     const changedCount = useMemo(() => {
-        return ingredients.filter(i => i.newQty !== '' && Number(i.newQty) !== i.currentQty).length
+        return ingredients.filter(i => i.newStock !== '' || i.newCostUnit !== '').length
     }, [ingredients])
 
     const loadIngredients = async () => {
-        setLoadingIngredients(true)
+        setLoading(true)
         try {
             const supabase = createClient()
             const { data, error } = await supabase
                 .from('ingredients')
-                .select('id, name, unit, category, quantity')
+                .select('id, name, unit, category, stock, cost_unit')
+                .eq('active', true)
                 .order('category')
                 .order('name')
 
@@ -93,112 +105,403 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
                 name: i.name,
                 unit: i.unit || 'und',
                 category: i.category || 'General',
-                currentQty: i.quantity ?? 0,
-                newQty: ''
+                stock: Number(i.stock ?? 0),
+                cost_unit: Number(i.cost_unit ?? 0),
+                newStock: '',
+                newCostUnit: ''
             })))
         } catch (err: any) {
             toast.error('Error al cargar insumos', { description: err.message })
         } finally {
-            setLoadingIngredients(false)
+            setLoading(false)
         }
     }
 
-    const handleQtyChange = (id: string, value: string) => {
-        setIngredients(prev => prev.map(i => i.id === id ? { ...i, newQty: value } : i))
+    const handleField = (id: string, field: 'newStock' | 'newCostUnit', value: string) => {
+        setIngredients(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i))
     }
 
-    const handleSaveInApp = async () => {
-        const toUpdate = ingredients.filter(i => i.newQty !== '' && !isNaN(Number(i.newQty)) && Number(i.newQty) >= 0)
-        if (toUpdate.length === 0) {
-            toast.warning('No hay cambios para guardar')
-            return
-        }
+    const handleCreateIngredient = async () => {
+        if (!newIng.name.trim()) { toast.warning('El nombre es obligatorio'); return }
+        if (!newIng.unit) { toast.warning('La unidad es obligatoria'); return }
 
-        setSavingCount(true)
+        setCreatingIngredient(true)
         try {
             const supabase = createClient()
             const { organization_id } = await getOrCreateProfile(supabase)
 
-            const items = toUpdate.map(i => ({
-                name: i.name,
-                quantity: Number(i.newQty),
-                total_price: 0,
-                category: i.category,
-                unit: i.unit
-            }))
-
-            const { data, error } = await supabase.rpc('upload_physical_count', {
-                p_organization_id: organization_id,
-                p_items: items
+            const { error } = await supabase.from('ingredients').insert({
+                organization_id,
+                name: newIng.name.trim(),
+                unit: newIng.unit,
+                category: newIng.category.trim() || null,
+                stock: newIng.stock !== '' ? Number(newIng.stock) : 0,
+                cost_unit: newIng.cost_unit !== '' ? Number(newIng.cost_unit) : 0,
+                min_stock: 0,
+                active: true
             })
 
             if (error) throw error
 
-            const successCount = (data as UploadResult[]).filter(r => r.success).length
-            toast.success(`✅ ${successCount} insumos actualizados`)
+            toast.success(`✅ Insumo "${newIng.name.trim()}" creado`)
+            setNewIng({ name: '', unit: 'und', category: '', stock: '', cost_unit: '' })
+            setShowAddForm(false)
+            await loadIngredients()
             onSuccess?.()
-            // Reset new quantities
-            setIngredients(prev => prev.map(i => ({
-                ...i,
-                currentQty: i.newQty !== '' && !isNaN(Number(i.newQty)) ? Number(i.newQty) : i.currentQty,
-                newQty: ''
-            })))
         } catch (err: any) {
-            toast.error('Error al guardar', { description: err.message })
+            toast.error('Error al crear insumo', { description: err.message })
         } finally {
-            setSavingCount(false)
+            setCreatingIngredient(false)
         }
     }
 
-    // Excel download: fetch real ingredients from DB
+    const handleSave = async () => {
+        const toUpdate = ingredients.filter(i =>
+            (i.newStock !== '' && !isNaN(Number(i.newStock)) && Number(i.newStock) >= 0) ||
+            (i.newCostUnit !== '' && !isNaN(Number(i.newCostUnit)) && Number(i.newCostUnit) >= 0)
+        )
+        if (toUpdate.length === 0) { toast.warning('Sin cambios para guardar'); return }
+
+        setSaving(true)
+        try {
+            const supabase = createClient()
+            const updates = toUpdate.map(i => {
+                const patch: Record<string, number> = {}
+                if (i.newStock !== '' && !isNaN(Number(i.newStock))) patch.stock = Number(i.newStock)
+                if (i.newCostUnit !== '' && !isNaN(Number(i.newCostUnit))) patch.cost_unit = Number(i.newCostUnit)
+                return supabase.from('ingredients').update(patch).eq('id', i.id)
+            })
+
+            const settled = await Promise.allSettled(updates)
+            const failed = settled.filter(r => r.status === 'rejected').length
+            const success = settled.length - failed
+
+            if (failed === 0) {
+                toast.success(`✅ ${success} insumo(s) actualizados`)
+                onSuccess?.()
+                await loadIngredients()
+            } else {
+                toast.warning(`⚠️ ${success} actualizados, ${failed} con error`)
+            }
+        } catch (err: any) {
+            toast.error('Error al guardar', { description: err.message })
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (v) loadIngredients() }}>
+            <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                    <ClipboardList className="h-4 w-4" />
+                    Contar en la App
+                </Button>
+            </DialogTrigger>
+
+            {/* FULL-SCREEN MODAL */}
+            <DialogContent className="!max-w-none w-screen h-screen max-h-screen rounded-none flex flex-col p-0 gap-0">
+                {/* Header */}
+                <DialogHeader className="flex-none px-6 py-4 border-b bg-background">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <DialogTitle className="text-xl font-bold">Conteo Físico de Inventario</DialogTitle>
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                                Escribe el stock físico que contaste y/o el precio por unidad. Solo se guardan los campos que edites.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {changedCount > 0 && (
+                                <span className="text-sm font-semibold text-blue-600">
+                                    {changedCount} insumo(s) con cambios
+                                </span>
+                            )}
+                            <Button
+                                variant="outline"
+                                onClick={() => setShowAddForm(v => !v)}
+                                className="gap-2"
+                            >
+                                {showAddForm ? <ChevronUp className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                                {showAddForm ? 'Cancelar' : 'Agregar Insumo'}
+                            </Button>
+                            <Button onClick={handleSave} disabled={saving || changedCount === 0} className="gap-2">
+                                <Save className="h-4 w-4" />
+                                {saving ? 'Guardando...' : `Guardar (${changedCount})`}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* ── Formulario Agregar Insumo ──── */}
+                    {showAddForm && (
+                        <div className="mt-3 p-4 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                            <h3 className="font-semibold text-sm text-green-800 dark:text-green-300 mb-3">Nuevo Insumo</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                                <div className="lg:col-span-2">
+                                    <Label className="text-xs">Nombre *</Label>
+                                    <Input
+                                        placeholder="Ej: Queso tajado"
+                                        value={newIng.name}
+                                        onChange={e => setNewIng(p => ({ ...p, name: e.target.value }))}
+                                        className="mt-1"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Unidad *</Label>
+                                    <Select value={newIng.unit} onValueChange={v => setNewIng(p => ({ ...p, unit: v }))}>
+                                        <SelectTrigger className="mt-1">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {COMMON_UNITS.map(u => (
+                                                <SelectItem key={u} value={u}>{u}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Categoría</Label>
+                                    <Input
+                                        placeholder="Ej: Lácteos"
+                                        value={newIng.category}
+                                        onChange={e => setNewIng(p => ({ ...p, category: e.target.value }))}
+                                        className="mt-1"
+                                        list="category-suggestions"
+                                    />
+                                    <datalist id="category-suggestions">
+                                        {categories.filter(c => c !== 'Todos').map(c => (
+                                            <option key={c} value={c} />
+                                        ))}
+                                    </datalist>
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Stock Inicial</Label>
+                                    <Input
+                                        type="number" min={0} placeholder="0"
+                                        value={newIng.stock}
+                                        onChange={e => setNewIng(p => ({ ...p, stock: e.target.value }))}
+                                        className="mt-1"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-xs">Precio / Unidad</Label>
+                                    <Input
+                                        type="number" min={0} placeholder="0"
+                                        value={newIng.cost_unit}
+                                        onChange={e => setNewIng(p => ({ ...p, cost_unit: e.target.value }))}
+                                        className="mt-1"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end mt-3">
+                                <Button
+                                    onClick={handleCreateIngredient}
+                                    disabled={creatingIngredient || !newIng.name.trim()}
+                                    className="gap-2 bg-green-700 hover:bg-green-800 text-white"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                    {creatingIngredient ? 'Creando...' : 'Crear Insumo'}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </DialogHeader>
+
+                {/* Filters */}
+                <div className="flex-none px-6 py-3 border-b bg-muted/30 space-y-2">
+                    <div className="flex gap-3 items-center">
+                        <div className="relative flex-1 max-w-sm">
+                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Buscar insumo..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="pl-9"
+                            />
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={loadIngredients}
+                            disabled={loading}
+                            className="gap-2 text-muted-foreground"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                            Recargar
+                        </Button>
+                        <span className="text-xs text-muted-foreground ml-auto">
+                            {filtered.length} insumo(s) • {ingredients.length} total
+                        </span>
+                    </div>
+
+                    {/* Category pills */}
+                    {categories.length > 1 && (
+                        <div className="flex gap-2 flex-wrap">
+                            {categories.map(cat => (
+                                <button
+                                    key={cat}
+                                    onClick={() => setSelectedCategory(cat)}
+                                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                                        selectedCategory === cat
+                                            ? 'bg-primary text-primary-foreground shadow-sm'
+                                            : 'bg-background border hover:border-primary/50 text-muted-foreground'
+                                    }`}
+                                >
+                                    {cat}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Table body — scrollable */}
+                <div className="flex-1 overflow-auto">
+                    {loading ? (
+                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                            <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+                            Cargando insumos...
+                        </div>
+                    ) : (
+                        <table className="w-full text-sm">
+                            <thead className="bg-muted/80 sticky top-0 z-10">
+                                <tr className="border-b">
+                                    <th className="text-left px-4 py-3 font-semibold w-[30%]">Insumo</th>
+                                    <th className="text-left px-4 py-3 font-semibold w-[15%]">Categoría</th>
+                                    <th className="text-center px-4 py-3 font-semibold w-[8%]">Unidad</th>
+                                    <th className="text-right px-4 py-3 font-semibold w-[12%]">Stock Actual</th>
+                                    <th className="text-right px-4 py-3 font-semibold w-[12%]">Precio / Unidad</th>
+                                    <th className="text-right px-4 py-3 font-semibold w-[11%] text-blue-700 dark:text-blue-400">
+                                        ✏️ Stock Nuevo
+                                    </th>
+                                    <th className="text-right px-4 py-3 font-semibold w-[12%] text-blue-700 dark:text-blue-400">
+                                        ✏️ Precio/Unidad Nuevo
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filtered.map((ing) => {
+                                    const hasChange = ing.newStock !== '' || ing.newCostUnit !== ''
+                                    return (
+                                        <tr
+                                            key={ing.id}
+                                            className={`border-b transition-colors ${
+                                                hasChange
+                                                    ? 'bg-blue-50 dark:bg-blue-950/20'
+                                                    : 'hover:bg-muted/30'
+                                            }`}
+                                        >
+                                            <td className="px-4 py-3 font-medium">{ing.name}</td>
+                                            <td className="px-4 py-3">
+                                                <Badge variant="outline" className="text-xs font-normal">
+                                                    {ing.category}
+                                                </Badge>
+                                            </td>
+                                            <td className="px-4 py-3 text-center text-muted-foreground">{ing.unit}</td>
+                                            <td className="px-4 py-3 text-right font-mono">
+                                                {ing.stock.toLocaleString('es-CO')}
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                                                {ing.cost_unit > 0
+                                                    ? `$${ing.cost_unit.toLocaleString('es-CO')}`
+                                                    : <span className="text-slate-400">—</span>
+                                                }
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    placeholder="—"
+                                                    value={ing.newStock}
+                                                    onChange={e => handleField(ing.id, 'newStock', e.target.value)}
+                                                    className="w-32 text-right h-9 ml-auto border-blue-200 focus:border-blue-500"
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    placeholder="—"
+                                                    value={ing.newCostUnit}
+                                                    onChange={e => handleField(ing.id, 'newCostUnit', e.target.value)}
+                                                    className="w-32 text-right h-9 ml-auto border-blue-200 focus:border-blue-500"
+                                                />
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    )}
+                    {!loading && filtered.length === 0 && (
+                        <div className="text-center py-16 text-muted-foreground">
+                            No se encontraron insumos
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex-none px-6 py-3 border-t bg-background flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                        Los campos en blanco no se modifican. Solo se actualizan los insumos que edites.
+                    </p>
+                    <Button onClick={handleSave} disabled={saving || changedCount === 0} size="lg" className="gap-2">
+                        <Save className="h-4 w-4" />
+                        {saving ? 'Guardando...' : `Guardar ${changedCount} cambio(s)`}
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT: Wrapper with Excel upload + In-App trigger
+// ══════════════════════════════════════════════════════════════════════════
+export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
+    const [excelOpen, setExcelOpen] = useState(false)
+    const [file, setFile] = useState<File | null>(null)
+    const [parsedData, setParsedData] = useState<ParsedExcelRow[]>([])
+    const [validationErrors, setValidationErrors] = useState<string[]>([])
+    const [uploading, setUploading] = useState(false)
+    const [results, setResults] = useState<UploadResult[]>([])
+    const [downloadingTemplate, setDownloadingTemplate] = useState(false)
+
     const downloadTemplate = async () => {
         setDownloadingTemplate(true)
         try {
             const supabase = createClient()
             const { data, error } = await supabase
                 .from('ingredients')
-                .select('name, category, unit, quantity')
+                .select('name, category, unit, stock, cost_unit')
+                .eq('active', true)
                 .order('category')
                 .order('name')
 
             if (error) throw error
+            if (!data || data.length === 0) { toast.warning('No hay insumos registrados'); return }
 
-            if (!data || data.length === 0) {
-                toast.warning('No hay insumos registrados aún')
-                return
-            }
-
-            const template = data.map(i => ({
+            const rows = data.map(i => ({
                 'Ingrediente': i.name,
-                'Cantidad NUEVA': '',           // <-- el trabajador llena esto
-                'Unidad': i.unit || 'und',
                 'Categoría': i.category || 'General',
-                'Stock Actual': i.quantity ?? 0  // referencia, para que vean cuánto hay
+                'Unidad': i.unit || 'und',
+                'Stock Actual': Number(i.stock ?? 0),
+                'Precio/Unidad Actual': Number(i.cost_unit ?? 0),
+                'Stock NUEVO (llenar)': '',
+                'Precio/Unidad NUEVO (opcional)': ''
             }))
 
-            const worksheet = utils.json_to_sheet(template)
-
-            // Widen columns
-            worksheet['!cols'] = [
-                { wch: 30 }, // Ingrediente
-                { wch: 18 }, // Cantidad NUEVA
-                { wch: 10 }, // Unidad
-                { wch: 18 }, // Categoría
-                { wch: 14 }, // Stock Actual
+            const ws = utils.json_to_sheet(rows)
+            ws['!cols'] = [
+                { wch: 34 }, { wch: 16 }, { wch: 8 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 28 }
             ]
-
-            const workbook = utils.book_new()
-            utils.book_append_sheet(workbook, worksheet, 'Inventario')
-
-            const excelBuffer = write(workbook, { bookType: 'xlsx', type: 'array' })
-            const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement('a')
-            link.href = url
-            link.download = `conteo_inventario_${new Date().toISOString().split('T')[0]}.xlsx`
-            link.click()
+            const wb = utils.book_new()
+            utils.book_append_sheet(wb, ws, 'Inventario')
+            const buf = write(wb, { bookType: 'xlsx', type: 'array' })
+            const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `conteo_inventario_${new Date().toISOString().split('T')[0]}.xlsx`
+            a.click()
             URL.revokeObjectURL(url)
-
             toast.success(`✅ Excel descargado con ${data.length} insumos`)
         } catch (err: any) {
             toast.error('Error al descargar plantilla', { description: err.message })
@@ -210,7 +513,6 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0]
         if (!selectedFile) return
-
         setFile(selectedFile)
         setValidationErrors([])
         setResults([])
@@ -218,63 +520,29 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
         const reader = new FileReader()
         reader.onload = (event) => {
             try {
-                const data = event.target?.result
-                const workbook = read(data, { type: 'binary' })
-                const sheetName = workbook.SheetNames[0]
-                const worksheet = workbook.Sheets[sheetName]
-                const jsonData = utils.sheet_to_json(worksheet) as any[]
-
+                const workbook = read(event.target?.result, { type: 'binary' })
+                const jsonData = utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[]
                 const errors: string[] = []
-                const parsed: ParsedRow[] = []
+                const parsed: ParsedExcelRow[] = []
 
                 jsonData.forEach((row, index) => {
-                    const rowNum = index + 2
-
                     const name = row['Ingrediente'] ? String(row['Ingrediente']).trim() : ''
-                    if (!name) {
-                        errors.push(`Fila ${rowNum}: Falta el nombre del ingrediente`)
-                        return
-                    }
-
-                    // Accept "Cantidad NUEVA" (from pre-filled template) OR "Cantidad"
-                    const rawQty = row['Cantidad NUEVA'] ?? row['Cantidad']
-                    if (rawQty === undefined || rawQty === '') {
-                        errors.push(`Fila ${rowNum}: "${name}" — falta la cantidad`)
-                        return
-                    }
-
-                    const quantity = Number(rawQty)
-                    if (isNaN(quantity)) {
-                        errors.push(`Fila ${rowNum}: "${name}" — cantidad inválida`)
-                        return
-                    }
-                    if (quantity < 0) {
-                        errors.push(`Fila ${rowNum}: "${name}" — cantidad no puede ser negativa`)
-                        return
-                    }
-
-                    const totalPrice = row['Precio Total'] !== undefined && row['Precio Total'] !== '' ? Number(row['Precio Total']) : 0
-
-                    parsed.push({
-                        name,
-                        quantity,
-                        total_price: isNaN(totalPrice) ? 0 : totalPrice,
-                        category: row['Categoría'] ? String(row['Categoría']).trim() : undefined,
-                        unit: row['Unidad'] ? String(row['Unidad']).trim() : undefined,
-                        rowNumber: rowNum
-                    })
+                    if (!name) return
+                    const rawQty = row['Stock NUEVO (llenar)'] ?? row['Cantidad NUEVA'] ?? row['Cantidad']
+                    if (rawQty === undefined || rawQty === '') return
+                    const qty = Number(rawQty)
+                    if (isNaN(qty) || qty < 0) { errors.push(`Fila ${index + 2}: "${name}" — cantidad inválida`); return }
+                    const rawCost = row['Precio/Unidad NUEVO (opcional)'] ?? row['Precio Total'] ?? ''
+                    const cost = rawCost !== '' ? Number(rawCost) : 0
+                    parsed.push({ name, quantity: qty, cost_unit: isNaN(cost) ? 0 : cost, category: row['Categoría'], unit: row['Unidad'], rowNumber: index + 2 })
                 })
 
                 setValidationErrors(errors)
                 setParsedData(parsed)
-
-                if (parsed.length > 0 && errors.length === 0) {
-                    toast.success(`✅ ${parsed.length} insumos listos para subir`)
-                }
+                if (parsed.length > 0 && errors.length === 0) toast.success(`✅ ${parsed.length} insumos listos`)
+                else if (parsed.length === 0 && errors.length === 0) toast.warning('No hay filas con "Stock NUEVO" llenado')
             } catch {
-                toast.error('Error al leer el archivo', {
-                    description: 'Asegúrate de que sea un archivo Excel válido (.xlsx)'
-                })
+                toast.error('Error al leer el archivo')
             }
         }
         reader.readAsBinaryString(selectedFile)
@@ -282,202 +550,70 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
 
     const handleUpload = async () => {
         if (parsedData.length === 0) return
-
         setUploading(true)
         try {
             const supabase = createClient()
             const { organization_id } = await getOrCreateProfile(supabase)
-
-            const { data, error } = await supabase.rpc('upload_physical_count', {
-                p_organization_id: organization_id,
-                p_items: parsedData as any
-            })
-
+            const items = parsedData.map(r => ({
+                name: r.name,
+                quantity: r.quantity,
+                total_price: r.cost_unit > 0 ? r.cost_unit * r.quantity : 0,
+                category: r.category,
+                unit: r.unit
+            }))
+            const { data, error } = await supabase.rpc('upload_physical_count', { p_organization_id: organization_id, p_items: items })
             if (error) throw error
-
             setResults(data as UploadResult[])
-
-            const successCount = data.filter((r: UploadResult) => r.success).length
-            const createdCount = data.filter((r: UploadResult) => r.was_created).length
+            const successCount = (data as UploadResult[]).filter(r => r.success).length
             const errorCount = data.length - successCount
-
             if (errorCount === 0) {
-                toast.success(`✅ Inventario actualizado`, {
-                    description: `${successCount} insumos${createdCount > 0 ? ` (${createdCount} nuevos)` : ''}`
-                })
+                toast.success('✅ Inventario actualizado', { description: `${successCount} insumos` })
                 onSuccess?.()
-                setTimeout(() => setOpen(false), 2000)
+                setTimeout(() => setExcelOpen(false), 2000)
             } else {
                 toast.warning(`⚠️ ${successCount} actualizados, ${errorCount} con errores`)
             }
-        } catch (error: any) {
-            toast.error('Error al actualizar inventario', { description: error.message })
+        } catch (err: any) {
+            toast.error('Error al actualizar inventario', { description: err.message })
         } finally {
             setUploading(false)
         }
     }
 
-    const resetForm = () => {
-        setFile(null)
-        setParsedData([])
-        setValidationErrors([])
-        setResults([])
-        setIngredients([])
-        setSearchQuery('')
-        setSelectedCategory('Todos')
-    }
-
-    const handleOpenChange = (newOpen: boolean) => {
-        setOpen(newOpen)
-        if (!newOpen) {
-            resetForm()
-        } else {
-            // Auto-load ingredients for in-app tab
-            loadIngredients()
-        }
-    }
-
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                    <FileSpreadsheet className="h-4 w-4" />
-                    Subir Conteo
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>Conteo Físico de Inventario</DialogTitle>
-                </DialogHeader>
+        <div className="flex gap-2">
+            {/* In-App count (full-screen modal) */}
+            <InAppCountModal onSuccess={onSuccess} />
 
-                <Tabs value={tab} onValueChange={(v) => setTab(v as 'excel' | 'app')}>
-                    <TabsList className="w-full">
-                        <TabsTrigger value="app" className="flex-1 gap-2">
-                            <ClipboardList className="h-4 w-4" />
-                            Contar en la App
-                        </TabsTrigger>
-                        <TabsTrigger value="excel" className="flex-1 gap-2">
-                            <FileSpreadsheet className="h-4 w-4" />
-                            Subir Excel
-                        </TabsTrigger>
-                    </TabsList>
+            {/* Excel upload modal */}
+            <Dialog open={excelOpen} onOpenChange={(v) => { setExcelOpen(v); if (!v) { setFile(null); setParsedData([]); setResults([]) } }}>
+                <DialogTrigger asChild>
+                    <Button variant="outline" className="gap-2">
+                        <FileSpreadsheet className="h-4 w-4" />
+                        Subir Excel
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Subir Conteo por Excel</DialogTitle>
+                    </DialogHeader>
 
-                    {/* ── IN-APP TAB ─────────────────────────────────── */}
-                    <TabsContent value="app" className="space-y-3 mt-4">
+                    <div className="space-y-4">
                         <Alert>
                             <Info className="h-4 w-4" />
                             <AlertDescription>
-                                Escribe la <strong>cantidad actual</strong> de cada insumo. Deja en blanco los que no vayas a actualizar.
-                            </AlertDescription>
-                        </Alert>
-
-                        <div className="flex gap-2">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    placeholder="Buscar insumo..."
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
-                                    className="pl-8"
-                                />
-                            </div>
-                            <div className="flex gap-1 flex-wrap">
-                                {categories.map(cat => (
-                                    <Button
-                                        key={cat}
-                                        size="sm"
-                                        variant={selectedCategory === cat ? 'default' : 'outline'}
-                                        onClick={() => setSelectedCategory(cat)}
-                                        className="text-xs h-8"
-                                    >
-                                        {cat}
-                                    </Button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {loadingIngredients ? (
-                            <div className="text-center py-8 text-muted-foreground">Cargando insumos...</div>
-                        ) : (
-                            <div className="border rounded-lg overflow-hidden max-h-[50vh] overflow-y-auto">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-muted sticky top-0">
-                                        <tr>
-                                            <th className="text-left p-2 font-semibold">Insumo</th>
-                                            <th className="text-center p-2 font-semibold">Categoría</th>
-                                            <th className="text-right p-2 font-semibold">Stock Actual</th>
-                                            <th className="text-right p-2 font-semibold w-32">Cantidad Nueva</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredIngredients.map((ing) => {
-                                            const hasChange = ing.newQty !== '' && Number(ing.newQty) !== ing.currentQty
-                                            return (
-                                                <tr key={ing.id} className={`border-t ${hasChange ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
-                                                    <td className="p-2 font-medium">{ing.name}</td>
-                                                    <td className="p-2 text-center">
-                                                        <Badge variant="outline" className="text-xs">{ing.category}</Badge>
-                                                    </td>
-                                                    <td className="p-2 text-right text-muted-foreground">
-                                                        {ing.currentQty.toLocaleString()} {ing.unit}
-                                                    </td>
-                                                    <td className="p-2 text-right">
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            placeholder="—"
-                                                            value={ing.newQty}
-                                                            onChange={e => handleQtyChange(ing.id, e.target.value)}
-                                                            className="w-28 text-right h-8 ml-auto"
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            )
-                                        })}
-                                    </tbody>
-                                </table>
-                                {filteredIngredients.length === 0 && (
-                                    <div className="text-center py-6 text-muted-foreground text-sm">
-                                        No se encontraron insumos
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        <div className="flex items-center justify-between pt-1">
-                            <span className="text-sm text-muted-foreground">
-                                {changedCount > 0 ? (
-                                    <span className="text-blue-600 font-medium">{changedCount} insumo(s) modificado(s)</span>
-                                ) : 'Sin cambios aún'}
-                            </span>
-                            <Button
-                                onClick={handleSaveInApp}
-                                disabled={savingCount || changedCount === 0}
-                                className="gap-2"
-                            >
-                                {savingCount ? 'Guardando...' : `Guardar ${changedCount > 0 ? changedCount : ''} Cambios`}
-                            </Button>
-                        </div>
-                    </TabsContent>
-
-                    {/* ── EXCEL TAB ──────────────────────────────────── */}
-                    <TabsContent value="excel" className="space-y-4 mt-4">
-                        <Alert>
-                            <Info className="h-4 w-4" />
-                            <AlertDescription>
-                                <div className="font-semibold mb-1">¿Cómo usar el Excel?</div>
-                                <ol className="text-xs space-y-1 list-decimal list-inside">
-                                    <li>Descarga la plantilla — ya viene con todos tus insumos y su stock actual</li>
-                                    <li>Llena la columna <strong>"Cantidad NUEVA"</strong> con lo que contaste</li>
-                                    <li>Sube el archivo y confirma la actualización</li>
+                                <ol className="text-xs list-decimal list-inside space-y-1">
+                                    <li>Descarga la plantilla — ya trae todos tus insumos con stock actual</li>
+                                    <li>Llena solo <strong>"Stock NUEVO"</strong> y opcionalmente "Precio/Unidad NUEVO"</li>
+                                    <li>Sube el archivo aquí</li>
                                 </ol>
                             </AlertDescription>
                         </Alert>
 
-                        <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border">
+                        <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border">
                             <div>
                                 <h4 className="font-semibold text-sm">Descargar Plantilla con tus Insumos</h4>
-                                <p className="text-xs text-muted-foreground mt-0.5">Se descarga con los nombres, categorías y stock actual. Solo llena la "Cantidad NUEVA".</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Incluye nombres, categorías, stock y precio actuales.</p>
                             </div>
                             <Button variant="outline" size="sm" onClick={downloadTemplate} disabled={downloadingTemplate} className="gap-2 shrink-0">
                                 <Download className="h-4 w-4" />
@@ -485,20 +621,12 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
                             </Button>
                         </div>
 
-                        <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                            <input
-                                type="file"
-                                accept=".xlsx,.xls"
-                                onChange={handleFileChange}
-                                className="hidden"
-                                id="excel-upload"
-                            />
-                            <label htmlFor="excel-upload" className="cursor-pointer">
-                                <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-                                <p className="text-sm font-medium">
-                                    {file ? file.name : 'Seleccionar archivo Excel'}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">Haz clic para seleccionar el archivo</p>
+                        <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
+                            <input type="file" accept=".xlsx,.xls" onChange={handleFileChange} className="hidden" id="excel-upload-main" />
+                            <label htmlFor="excel-upload-main" className="cursor-pointer block">
+                                <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                                <p className="text-sm font-medium">{file ? file.name : 'Haz clic para seleccionar el Excel'}</p>
+                                {!file && <p className="text-xs text-muted-foreground mt-1">Formato .xlsx</p>}
                             </label>
                         </div>
 
@@ -506,86 +634,75 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
                             <Alert variant="destructive">
                                 <AlertCircle className="h-4 w-4" />
                                 <AlertDescription>
-                                    <div className="font-semibold mb-2">Errores ({validationErrors.length}):</div>
-                                    <ul className="list-disc list-inside text-xs space-y-1 max-h-32 overflow-y-auto">
-                                        {validationErrors.map((error, i) => (
-                                            <li key={i}>{error}</li>
-                                        ))}
+                                    <div className="font-semibold mb-1">Errores ({validationErrors.length}):</div>
+                                    <ul className="list-disc list-inside text-xs space-y-1 max-h-24 overflow-y-auto">
+                                        {validationErrors.map((e, i) => <li key={i}>{e}</li>)}
                                     </ul>
                                 </AlertDescription>
                             </Alert>
                         )}
 
                         {parsedData.length > 0 && validationErrors.length === 0 && !results.length && (
-                            <div>
-                                <h4 className="font-semibold mb-2">Vista Previa — {parsedData.length} insumos</h4>
-                                <div className="border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-muted sticky top-0">
-                                            <tr>
-                                                <th className="text-left p-2">Ingrediente</th>
-                                                <th className="text-center p-2">Categoría</th>
-                                                <th className="text-center p-2">Unidad</th>
-                                                <th className="text-right p-2">Cantidad Nueva</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {parsedData.map((row, i) => (
-                                                <tr key={i} className="border-t">
-                                                    <td className="p-2 font-medium">{row.name}</td>
-                                                    <td className="p-2 text-center">
-                                                        {row.category ? (
-                                                            <Badge variant="outline" className="text-xs">{row.category}</Badge>
-                                                        ) : '-'}
-                                                    </td>
-                                                    <td className="p-2 text-center">
-                                                        <Badge variant="secondary" className="text-xs">{row.unit || '-'}</Badge>
-                                                    </td>
-                                                    <td className="p-2 text-right font-semibold">{row.quantity.toLocaleString()}</td>
+                            <>
+                                <div>
+                                    <h4 className="font-semibold mb-2">Vista Previa — {parsedData.length} insumos</h4>
+                                    <div className="border rounded-lg overflow-hidden max-h-60 overflow-y-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-muted sticky top-0">
+                                                <tr>
+                                                    <th className="text-left p-2">Insumo</th>
+                                                    <th className="text-center p-2">Cat.</th>
+                                                    <th className="text-center p-2">Und.</th>
+                                                    <th className="text-right p-2">Stock Nuevo</th>
+                                                    <th className="text-right p-2">Precio/Und</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody>
+                                                {parsedData.map((row, i) => (
+                                                    <tr key={i} className="border-t">
+                                                        <td className="p-2 font-medium">{row.name}</td>
+                                                        <td className="p-2 text-center text-xs">{row.category || '—'}</td>
+                                                        <td className="p-2 text-center text-xs text-muted-foreground">{row.unit || '—'}</td>
+                                                        <td className="p-2 text-right font-semibold">{row.quantity.toLocaleString('es-CO')}</td>
+                                                        <td className="p-2 text-right">{row.cost_unit > 0 ? `$${row.cost_unit.toLocaleString('es-CO')}` : '—'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                            </div>
+                                <div className="flex gap-2 justify-end">
+                                    <Button variant="outline" onClick={() => { setFile(null); setParsedData([]) }}>Cancelar</Button>
+                                    <Button onClick={handleUpload} disabled={uploading}>
+                                        {uploading ? 'Subiendo...' : `Confirmar ${parsedData.length} Insumos`}
+                                    </Button>
+                                </div>
+                            </>
                         )}
 
                         {results.length > 0 && (
                             <div>
                                 <h4 className="font-semibold mb-2">Resultados</h4>
-                                <div className="border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                                <div className="border rounded-lg overflow-hidden max-h-60 overflow-y-auto">
                                     <table className="w-full text-sm">
                                         <thead className="bg-muted sticky top-0">
                                             <tr>
                                                 <th className="text-left p-2">Estado</th>
-                                                <th className="text-left p-2">Ingrediente</th>
+                                                <th className="text-left p-2">Insumo</th>
                                                 <th className="text-right p-2">Cantidad</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {results.map((result, i) => (
+                                            {results.map((r, i) => (
                                                 <tr key={i} className="border-t">
                                                     <td className="p-2">
-                                                        {result.success ? (
-                                                            <div className="flex items-center gap-1">
-                                                                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                                                {result.was_created && (
-                                                                    <Badge variant="secondary" className="text-xs">Nuevo</Badge>
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            <AlertCircle className="h-4 w-4 text-red-600" />
-                                                        )}
+                                                        {r.success
+                                                            ? <div className="flex gap-1 items-center"><CheckCircle2 className="h-4 w-4 text-green-600" />{r.was_created && <Badge variant="secondary" className="text-xs">Nuevo</Badge>}</div>
+                                                            : <AlertCircle className="h-4 w-4 text-red-600" />
+                                                        }
                                                     </td>
-                                                    <td className="p-2">
-                                                        {result.ingredient_name}
-                                                        {result.error_message && (
-                                                            <div className="text-xs text-red-600">{result.error_message}</div>
-                                                        )}
-                                                    </td>
-                                                    <td className="p-2 text-right font-semibold">
-                                                        {result.quantity?.toLocaleString() ?? '-'}
-                                                    </td>
+                                                    <td className="p-2">{r.ingredient_name}{r.error_message && <div className="text-xs text-red-600">{r.error_message}</div>}</td>
+                                                    <td className="p-2 text-right font-semibold">{r.quantity?.toLocaleString('es-CO') ?? '—'}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -593,18 +710,9 @@ export function BulkInventoryUpload({ onSuccess }: { onSuccess?: () => void }) {
                                 </div>
                             </div>
                         )}
-
-                        {parsedData.length > 0 && validationErrors.length === 0 && !results.length && (
-                            <div className="flex gap-2 justify-end">
-                                <Button variant="outline" onClick={resetForm}>Cancelar</Button>
-                                <Button onClick={handleUpload} disabled={uploading}>
-                                    {uploading ? 'Subiendo...' : `Subir ${parsedData.length} Insumos`}
-                                </Button>
-                            </div>
-                        )}
-                    </TabsContent>
-                </Tabs>
-            </DialogContent>
-        </Dialog>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </div>
     )
 }
