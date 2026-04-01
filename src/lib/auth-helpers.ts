@@ -5,7 +5,7 @@ export async function getOrCreateProfile(supabase: SupabaseClient) {
     if (!user) throw new Error('Usuario no autenticado')
 
     // 1. Try to get profile
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('organization_id')
         .eq('id', user.id)
@@ -13,8 +13,13 @@ export async function getOrCreateProfile(supabase: SupabaseClient) {
 
     if (profile) return { user, organization_id: profile.organization_id }
 
-    // 2. If no profile, check if user has any profile (maybe error in query?)
-    // Assuming strictly no profile row: Create Org + Profile
+    // PGRST116 = PostgREST "no rows returned" — the only safe case to auto-create.
+    // Any other error (RLS, network, etc.) must NOT silently create an ADMIN profile.
+    if (profileError && profileError.code !== 'PGRST116') {
+        throw profileError
+    }
+
+    // 2. No profile row exists — first-time ADMIN setup only.
     console.log('Creando perfil y organización por defecto...')
 
     const { data: newOrg, error: orgError } = await supabase
@@ -25,7 +30,7 @@ export async function getOrCreateProfile(supabase: SupabaseClient) {
 
     if (orgError) throw orgError
 
-    const { error: profileError } = await supabase
+    const { error: profileCreateError } = await supabase
         .from('profiles')
         .insert({
             id: user.id,
@@ -35,7 +40,7 @@ export async function getOrCreateProfile(supabase: SupabaseClient) {
             active: true
         })
 
-    if (profileError) throw profileError
+    if (profileCreateError) throw profileCreateError
 
     return { user, organization_id: newOrg.id }
 }

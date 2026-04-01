@@ -38,9 +38,6 @@ export function useCurrentProfile() {
     return useQuery({
         queryKey: ['current-profile'],
         queryFn: async () => {
-            // Ensure profile exists
-            await getOrCreateProfile(supabase)
-
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return null
 

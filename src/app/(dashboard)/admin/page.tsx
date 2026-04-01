@@ -64,7 +64,7 @@ export default function AdminPage() {
     // Redirect non-admin users
     useEffect(() => {
         if (!profileLoading && currentProfile && currentProfile.role !== 'ADMIN') {
-            router.push('/dashboard')
+            router.push('/pos')
         }
     }, [currentProfile, profileLoading, router])
 
