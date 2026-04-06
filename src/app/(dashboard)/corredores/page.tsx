@@ -435,7 +435,8 @@ function BulkReturnModal({
 
                 {/* ── PANTALLA 1: elegir acción ── */}
                 {screen === 'choose' && (
-                    <div className="flex flex-col gap-3 px-5 py-5">
+                    <>
+                    <div className="flex-1 overflow-y-auto px-5 py-5">
                         {/* resumen rápido */}
                         <div className="bg-slate-50 rounded-xl p-3 space-y-1.5">
                             {items.map(item => (
@@ -450,6 +451,9 @@ function BulkReturnModal({
                             </div>
                         </div>
 
+                    </div>
+
+                    <div className="px-5 pb-5 pt-3 border-t space-y-2">
                         {/* acción principal */}
                         <Button
                             className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl gap-2"
@@ -474,6 +478,7 @@ function BulkReturnModal({
                             <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>
+                    </>
                 )}
 
                 {/* ── PANTALLA 2: ingresar cantidades ── */}
