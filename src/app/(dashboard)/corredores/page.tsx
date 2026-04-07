@@ -74,6 +74,8 @@ export default function CorredoresPage() {
             dateLabel: string; events: Event[]; hasActive: boolean
             // flat items list for bulk return (all events merged)
             allItems: any[]
+            // all items including closed events (for admin edit modal)
+            allItemsAll: any[]
         }
         const map: Record<string, Block> = {}
 
@@ -90,7 +92,7 @@ export default function CorredoresPage() {
                 const dateLabel = isToday
                     ? 'Hoy'
                     : new Date(date + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
-                map[blockKey] = { key: blockKey, runnerId: rid, runner: item.runner, date, isToday, dateLabel, events: [], hasActive: false, allItems: [] }
+                map[blockKey] = { key: blockKey, runnerId: rid, runner: item.runner, date, isToday, dateLabel, events: [], hasActive: false, allItems: [], allItemsAll: [] }
             }
             const block = map[blockKey]
 
@@ -133,6 +135,19 @@ export default function CorredoresPage() {
                 }
             }
             block.allItems = Object.values(flatMap).sort((a, b) => b.assigned_qty - a.assigned_qty)
+            // allItemsAll: merge ALL events (active + closed) for admin edit modal
+            const flatMapAll: Record<string, any> = {}
+            for (const event of block.events) {
+                for (const p of event.items) {
+                    const pid = p.product?.id || p.product_id
+                    if (!flatMapAll[pid]) flatMapAll[pid] = { ...p, assigned_qty: 0, returned_qty: 0, _ids: [] }
+                    flatMapAll[pid].assigned_qty += p.assigned_qty
+                    flatMapAll[pid].returned_qty += p.returned_qty
+                    flatMapAll[pid]._ids.push(...p._ids)
+                    if (p.status === 'active') flatMapAll[pid].status = 'active'
+                }
+            }
+            block.allItemsAll = Object.values(flatMapAll).sort((a, b) => b.assigned_qty - a.assigned_qty)
             return block
         }).sort((a, b) => a.date !== b.date ? a.date.localeCompare(b.date) : (a.runner?.full_name || '').localeCompare(b.runner?.full_name || ''))
     }, [inventory, today])
@@ -153,10 +168,10 @@ export default function CorredoresPage() {
                     <h1 className="text-2xl font-bold text-slate-800">Corredores</h1>
                     <p className="text-muted-foreground text-sm">Inventario y cierre de turno de corredores de hoy.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                     <Button variant="outline" size="sm" onClick={() => refetch()}>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Actualizar
+                        <RefreshCw className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Actualizar</span>
                     </Button>
                     <AssignInventoryDialog open={assignOpen} onOpenChange={setAssignOpen} />
                 </div>
@@ -291,59 +306,61 @@ export default function CorredoresPage() {
                                         {/* Block header */}
                                         <div
                                             className={cn(
-                                                "flex items-center justify-between px-4 py-3 cursor-pointer transition-colors",
+                                                "px-3 sm:px-4 py-3 cursor-pointer transition-colors",
                                                 block.isToday ? "bg-slate-50 hover:bg-slate-100" : "bg-orange-50 hover:bg-orange-100"
                                             )}
                                             onClick={() => toggleBlock(block.key)}
                                         >
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                {isExpanded
-                                                    ? <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                                                    : <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                                                }
-                                                <div className="min-w-0">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="font-semibold text-slate-800">{block.runner?.full_name || 'Corredor'}</span>
-                                                        {!block.isToday && <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />}
-                                                        <Badge variant="outline" className={cn("text-xs", !block.isToday && "border-orange-300 text-orange-700 bg-orange-50")}>
-                                                            {block.dateLabel}
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    {isExpanded
+                                                        ? <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                                                        : <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                                                    }
+                                                    <span className="font-semibold text-slate-800 truncate">{block.runner?.full_name || 'Corredor'}</span>
+                                                    {!block.isToday && <AlertTriangle className="h-3.5 w-3.5 text-orange-500 shrink-0" />}
+                                                    {block.hasActive
+                                                        ? <Badge className={cn("text-white text-xs shrink-0", block.isToday ? "bg-green-500" : "bg-orange-500")}>
+                                                            {block.isToday ? 'Activo' : 'Sin cerrar'}
                                                         </Badge>
-                                                        <Badge variant="outline" className="text-xs text-slate-500">
-                                                            {block.events.length} asignación{block.events.length !== 1 ? 'es' : ''} · {uniqueProducts} productos
-                                                        </Badge>
-                                                        {block.hasActive
-                                                            ? <Badge className={cn("text-white text-xs", block.isToday ? "bg-green-500" : "bg-orange-500")}>
-                                                                {block.isToday ? 'Activo' : 'Sin cerrar'}
-                                                            </Badge>
-                                                            : <Badge variant="secondary" className="text-xs">Cerrado</Badge>
-                                                        }
-                                                    </div>
+                                                        : <Badge variant="secondary" className="text-xs shrink-0">Cerrado</Badge>
+                                                    }
+                                                </div>
+                                                <div className="shrink-0">
+                                                    {block.hasActive && (
+                                                        <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white text-xs"
+                                                            onClick={(e) => { e.stopPropagation(); setClosingRunner({ id: block.runnerId, name: block.runner?.full_name || 'Corredor', date: block.date }) }}>
+                                                            <RotateCcw className="h-3.5 w-3.5 sm:mr-1.5" />
+                                                            <span className="hidden sm:inline">Cerrar Turno</span>
+                                                        </Button>
+                                                    )}
+                                                    {!block.hasActive && currentProfile?.role === 'ADMIN' && block.events.length > 0 && (
+                                                        <Button size="sm" variant="outline" className="text-slate-500 hover:text-orange-600 hover:border-orange-200 text-xs"
+                                                            onClick={(e) => { e.stopPropagation(); setEditingRunner({ id: block.runnerId, name: block.runner?.full_name || 'Corredor', date: block.date }) }}>
+                                                            <Pencil className="h-3.5 w-3.5 sm:mr-1.5" />
+                                                            <span className="hidden sm:inline">Editar Devolución</span>
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                {block.hasActive && (
-                                                    <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white"
-                                                        onClick={(e) => { e.stopPropagation(); setClosingRunner({ id: block.runnerId, name: block.runner?.full_name || 'Corredor', date: block.date }) }}>
-                                                        <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Cerrar Turno
-                                                    </Button>
-                                                )}
-                                                {!block.hasActive && currentProfile?.role === 'ADMIN' && block.events.length > 0 && (
-                                                    <Button size="sm" variant="outline" className="text-slate-500 hover:text-orange-600 hover:border-orange-200"
-                                                        onClick={(e) => { e.stopPropagation(); setEditingRunner({ id: block.runnerId, name: block.runner?.full_name || 'Corredor', date: block.date }) }}>
-                                                        <Pencil className="h-3.5 w-3.5 mr-1.5" />Editar Devolución
-                                                    </Button>
-                                                )}
+                                            <div className="flex items-center gap-1.5 flex-wrap mt-1.5 pl-6">
+                                                <Badge variant="outline" className={cn("text-[10px]", !block.isToday && "border-orange-300 text-orange-700 bg-orange-50")}>
+                                                    {block.dateLabel}
+                                                </Badge>
+                                                <Badge variant="outline" className="text-[10px] text-slate-500">
+                                                    {block.events.length} asig. · {uniqueProducts} prod.
+                                                </Badge>
                                             </div>
                                         </div>
 
                                         {/* Events expanded — each assignment as its own sub-section */}
                                         {isExpanded && (
                                             <div className="divide-y">
-                                                <div className="grid grid-cols-4 gap-2 px-4 py-2 bg-white text-xs font-medium text-slate-400 uppercase tracking-wide">
+                                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 sm:gap-x-4 px-3 sm:px-4 py-2 bg-white text-xs font-medium text-slate-400 uppercase tracking-wide">
                                                     <span>Producto</span>
-                                                    <span className="text-center">Asignado</span>
-                                                    <span className="text-center">Devuelto</span>
-                                                    <span className="text-center">Vendido</span>
+                                                    <span className="w-10 text-center">Asig.</span>
+                                                    <span className="w-10 text-center">Dev.</span>
+                                                    <span className="w-10 text-center">Vend.</span>
                                                 </div>
                                                 {block.events.map((event, ei) => {
                                                     const timeLabel = event.assignedAt
@@ -366,21 +383,21 @@ export default function CorredoresPage() {
                                                                 const sold = item.assigned_qty - item.returned_qty
                                                                 return (
                                                                     <div key={`${block.key}-${ei}-${item.product?.id || item.product_id}`} className={cn(
-                                                                        "grid grid-cols-4 gap-2 px-4 py-2.5 items-center text-sm",
+                                                                        "grid grid-cols-[1fr_auto_auto_auto] gap-x-3 sm:gap-x-4 px-3 sm:px-4 py-2.5 items-center text-sm",
                                                                         !event.hasActive ? 'bg-slate-50/50 opacity-70' : 'bg-white hover:bg-slate-50'
                                                                     )}>
-                                                                        <p className="font-medium text-slate-800">{item.product?.name}</p>
-                                                                        <p className="text-center font-semibold text-slate-700">{item.assigned_qty}</p>
-                                                                        <p className="text-center font-semibold text-yellow-600">{item.returned_qty}</p>
-                                                                        <p className={cn("text-center font-bold", sold > 0 ? "text-green-600" : sold < 0 ? "text-red-500" : "text-slate-400")}>{sold}</p>
+                                                                        <p className="font-medium text-slate-800 truncate">{item.product?.name}</p>
+                                                                        <p className="w-10 text-center font-semibold text-slate-700">{item.assigned_qty}</p>
+                                                                        <p className="w-10 text-center font-semibold text-yellow-600">{item.returned_qty}</p>
+                                                                        <p className={cn("w-10 text-center font-bold", sold > 0 ? "text-green-600" : sold < 0 ? "text-red-500" : "text-slate-400")}>{sold}</p>
                                                                     </div>
                                                                 )
                                                             })}
-                                                            <div className={cn("grid grid-cols-4 gap-2 px-4 py-1.5 text-xs font-bold border-t", event.hasActive ? "bg-blue-50/50 text-blue-800" : "bg-slate-100 text-slate-500")}>
+                                                            <div className={cn("grid grid-cols-[1fr_auto_auto_auto] gap-x-3 sm:gap-x-4 px-3 sm:px-4 py-1.5 text-xs font-bold border-t", event.hasActive ? "bg-blue-50/50 text-blue-800" : "bg-slate-100 text-slate-500")}>
                                                                 <span>Subtotal</span>
-                                                                <span className="text-center">{eTotal.assigned}</span>
-                                                                <span className="text-center">{eTotal.returned}</span>
-                                                                <span className="text-center">{eTotal.assigned - eTotal.returned}</span>
+                                                                <span className="w-10 text-center">{eTotal.assigned}</span>
+                                                                <span className="w-10 text-center">{eTotal.returned}</span>
+                                                                <span className="w-10 text-center">{eTotal.assigned - eTotal.returned}</span>
                                                             </div>
                                                         </div>
                                                     )
@@ -416,7 +433,7 @@ export default function CorredoresPage() {
                     <AdminEditReturnModal
                         runnerId={editingRunner.id}
                         runnerName={editingRunner.name}
-                        items={block?.allItems || []}
+                        items={block?.allItemsAll || []}
                         onClose={() => setEditingRunner(null)}
                     />
                 )

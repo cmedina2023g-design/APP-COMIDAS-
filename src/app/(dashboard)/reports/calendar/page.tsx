@@ -5,12 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useMonthlyReport, useRunnerSales } from '@/hooks/use-reports'
+import { useMonthlyReport, useRunnerSales, useRunnerSaleDetails } from '@/hooks/use-reports'
 import { useReceivables } from '@/hooks/use-sales'
 import { useShiftSales, useShiftPaymentMethods, useRunnerPaymentMethods, useMonthlyRunnerInventory } from '@/hooks/use-sessions'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isSameDay } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Loader2, TrendingUp, TrendingDown, DollarSign, Award, AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Sun, Moon, UserCircle, Store, CheckCircle2, ArrowRight } from 'lucide-react'
+import { Loader2, TrendingUp, TrendingDown, DollarSign, Award, AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Sun, Moon, UserCircle, Store, CheckCircle2, ArrowRight } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
@@ -492,7 +493,6 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
                     </div>
 
                     {/* Runners Section */}
-                    {/* Runners Section */}
                     <div className="space-y-2 mt-2 pt-2 border-t">
                         <h4 className="text-sm font-semibold text-slate-700 mb-2">Ventas por Corredor (POS)</h4>
 
@@ -500,37 +500,12 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
                         {dayRunners.length > 0 ? (
                             <div className="space-y-2">
                                 {dayRunners.map((runner: any, i: number) => (
-                                    <div key={i} className="bg-blue-50/50 rounded border border-blue-100 mb-2 overflow-hidden">
-                                        <div className="flex justify-between items-center p-2">
-                                            <div className="flex items-center gap-2">
-                                                <UserCircle className="h-4 w-4 text-blue-500" />
-                                                <span className="text-sm font-medium">{runner.runner_name}</span>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="font-bold text-slate-700">${parseFloat(runner.total_sales).toLocaleString()}</p>
-                                                <p className="text-[10px] text-muted-foreground">{runner.transaction_count} tickets</p>
-                                            </div>
-                                        </div>
-                                        {/* Runner Breakdown */}
-                                        {(() => {
-                                            const rMethods = runnerPaymentMethods?.filter((pm: any) =>
-                                                pm.sale_date === dateStr && pm.runner_name === runner.runner_name
-                                            ) || []
-
-                                            if (rMethods.length > 0) {
-                                                return (
-                                                    <div className="bg-white/50 px-2 pb-2 pt-1 border-t border-blue-100/50">
-                                                        {rMethods.map((rpm: any, idx: number) => (
-                                                            <div key={idx} className="flex justify-between text-[11px] text-slate-600">
-                                                                <span>{rpm.payment_method}</span>
-                                                                <span className="font-medium">${parseFloat(rpm.total_amount).toLocaleString()}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )
-                                            }
-                                        })()}
-                                    </div>
+                                    <RunnerDetailCard
+                                        key={i}
+                                        runner={runner}
+                                        dateStr={dateStr}
+                                        runnerPaymentMethods={runnerPaymentMethods}
+                                    />
                                 ))}
                             </div>
                         ) : (
@@ -600,5 +575,117 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
                 </div>
             </DialogContent>
         </Dialog >
+    )
+}
+
+// ─────────────────────────────────────────────
+// Runner Detail Card — expandable with POS sale details
+// ─────────────────────────────────────────────
+function RunnerDetailCard({ runner, dateStr, runnerPaymentMethods }: {
+    runner: any
+    dateStr: string
+    runnerPaymentMethods: any[] | undefined
+}) {
+    const [expanded, setExpanded] = useState(false)
+    const startOfDay = new Date(dateStr + 'T00:00:00-05:00')
+    const endOfDay = new Date(dateStr + 'T23:59:59.999-05:00')
+    const { data: saleDetails, isLoading } = useRunnerSaleDetails(
+        expanded ? runner.runner_id : null,
+        startOfDay,
+        endOfDay
+    )
+
+    const rMethods = runnerPaymentMethods?.filter((pm: any) =>
+        pm.sale_date === dateStr && pm.runner_name === runner.runner_name
+    ) || []
+
+    return (
+        <div className="bg-blue-50/50 rounded border border-blue-100 overflow-hidden">
+            <button
+                type="button"
+                className="w-full flex justify-between items-center p-2 hover:bg-blue-100/50 transition-colors"
+                onClick={() => setExpanded(!expanded)}
+            >
+                <div className="flex items-center gap-2">
+                    <UserCircle className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm font-medium">{runner.runner_name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="text-right">
+                        <p className="font-bold text-slate-700">${parseFloat(runner.total_sales).toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground">{runner.transaction_count} tickets</p>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 text-slate-400 transition-transform", expanded && "rotate-180")} />
+                </div>
+            </button>
+
+            {/* Payment methods */}
+            {rMethods.length > 0 && (
+                <div className="bg-white/50 px-2 pb-2 pt-1 border-t border-blue-100/50">
+                    {rMethods.map((rpm: any, idx: number) => (
+                        <div key={idx} className="flex justify-between text-[11px] text-slate-600">
+                            <span>{rpm.payment_method}</span>
+                            <span className="font-medium">${parseFloat(rpm.total_amount).toLocaleString()}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Expanded: sale details */}
+            {expanded && (
+                <div className="border-t border-blue-200 bg-white px-3 py-2">
+                    {isLoading ? (
+                        <div className="flex items-center justify-center py-4 text-slate-400 text-sm gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Cargando ventas...
+                        </div>
+                    ) : !saleDetails || saleDetails.length === 0 ? (
+                        <p className="text-sm text-slate-400 text-center py-3">Sin ventas detalladas.</p>
+                    ) : (
+                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                            {saleDetails.map((sale, i) => (
+                                <div key={sale.id} className="rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+                                    <div className="flex justify-between items-center px-3 py-2 bg-white border-b border-slate-100">
+                                        <div>
+                                            <span className="font-mono text-xs font-bold text-blue-600">
+                                                {format(new Date(sale.created_at), 'hh:mm a')}
+                                            </span>
+                                            <span className="ml-1.5 text-[10px] text-slate-400">#{i + 1}</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="font-bold text-sm text-slate-900">${sale.total.toLocaleString()}</span>
+                                            <Badge variant="outline" className="ml-1.5 text-[9px] font-semibold">
+                                                {sale.payments.map(p => p.method).join(' + ') || '?'}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                    <div className="px-3 py-1.5 space-y-0.5">
+                                        {sale.items.map((item, j) => (
+                                            <div key={j} className="text-xs">
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-700">
+                                                        <span className="text-slate-400 mr-1">{item.qty}x</span>
+                                                        {item.product_name}
+                                                    </span>
+                                                    <span className="text-slate-600">${item.subtotal.toLocaleString()}</span>
+                                                </div>
+                                                {item.modifiers.length > 0 && (
+                                                    <p className="text-[10px] text-slate-400 pl-4">+ {item.modifiers.join(', ')}</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                            <div className="flex justify-between items-center pt-2 border-t text-sm font-bold text-slate-800">
+                                <span>Total</span>
+                                <span className="text-emerald-600">
+                                    ${saleDetails.reduce((acc, s) => acc + s.total, 0).toLocaleString()}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
     )
 }
