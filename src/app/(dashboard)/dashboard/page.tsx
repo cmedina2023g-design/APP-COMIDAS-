@@ -229,7 +229,7 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* Corredores Hoy — inventory + POS sales combined */}
+            {/* Corredores Hoy — inventory + POS sales combined, separated by shift */}
             {(runnerSummary as any[]).length > 0 && (
                 <div>
                     <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -238,17 +238,17 @@ export default function DashboardPage() {
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {(runnerSummary as any[]).map((runner: any) => {
-                            const posSale = runnerSales?.find((r: any) => r.runner_id === runner.runner_id)
-                            const posTotal = posSale ? Number(posSale.total_sales) : 0
+                            const posTotal = runner.total_pos_sales || 0
                             const isActive = runner.active_assignments > 0
+                            const cardKey = `${runner.runner_id}__${runner.shift_id || 'none'}`
                             return (
                                 <Card
-                                    key={runner.runner_id}
-                                    className={`border-t-4 ${isActive ? 'border-t-green-500' : 'border-t-slate-300'} ${posSale ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
-                                    onClick={() => posSale ? setSelectedRunner({ id: runner.runner_id, name: runner.runner_name }) : null}
+                                    key={cardKey}
+                                    className={`border-t-4 ${isActive ? 'border-t-green-500' : 'border-t-slate-300'} ${posTotal > 0 ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                                    onClick={() => posTotal > 0 ? setSelectedRunner({ id: runner.runner_id, name: runner.runner_name }) : null}
                                 >
                                     <CardContent className="pt-4">
-                                        <div className="flex justify-between items-center mb-2">
+                                        <div className="flex justify-between items-center mb-1">
                                             <div className="flex items-center gap-2">
                                                 <UserCircle className={`h-5 w-5 ${isActive ? 'text-green-500' : 'text-slate-400'}`} />
                                                 <span className="font-medium">{runner.runner_name}</span>
@@ -257,6 +257,11 @@ export default function DashboardPage() {
                                                 {isActive ? 'En ruta' : 'Cerrado'}
                                             </Badge>
                                         </div>
+                                        {runner.shift_name && (
+                                            <p className="text-xs text-slate-500 mb-2 pl-7">
+                                                {runner.shift_name === 'Mañana' ? '☀️' : '🌙'} Turno {runner.shift_name}
+                                            </p>
+                                        )}
                                         <div className="grid grid-cols-2 gap-2 text-center text-sm mt-2">
                                             <div className="bg-slate-50 rounded p-1.5">
                                                 <p className="text-[10px] text-slate-500 uppercase font-medium">Asignado</p>
@@ -267,7 +272,7 @@ export default function DashboardPage() {
                                                 <p className="font-bold text-green-700">${posTotal.toLocaleString()}</p>
                                             </div>
                                         </div>
-                                        {posSale && (
+                                        {posTotal > 0 && (
                                             <p className="text-[10px] text-blue-400 font-semibold mt-2 text-center">VER DETALLE →</p>
                                         )}
                                         {/* Payment Breakdown */}

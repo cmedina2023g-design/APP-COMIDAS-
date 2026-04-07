@@ -343,7 +343,8 @@ export function useRunnerInventory(runnerId?: string) {
                     *,
                     runner:profiles!runner_id(id, full_name, role),
                     product:products!product_id(id, name, price, category),
-                    assigner:profiles!assigned_by(full_name)
+                    assigner:profiles!assigned_by(full_name),
+                    shift:shifts!shift_id(id, name)
                 `)
                 .eq('organization_id', organization_id)
                 .or(`assignment_date.eq.${today},and(status.eq.active,assignment_date.lt.${today})`)
@@ -484,12 +485,14 @@ export function useRunnerSummary() {
             const { organization_id } = await getOrCreateProfile(supabase)
             const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
-            // Fetch inventory assignments summary
+            // Fetch inventory assignments summary (includes shift_id)
             const { data: inventoryData, error: invErr } = await supabase
                 .from('runner_inventory_assignments')
                 .select(`
                     runner_id,
+                    shift_id,
                     runner:profiles!runner_id(full_name),
+                    shift:shifts!shift_id(name),
                     assigned_qty,
                     returned_qty,
                     sold_qty,
@@ -501,10 +504,19 @@ export function useRunnerSummary() {
 
             if (invErr) throw invErr
 
-            // Fetch actual POS sales by runner for today
+            // Fetch shift definitions to resolve null shift_ids by time
+            const { data: shiftDefs } = await supabase
+                .from('shifts')
+                .select('*')
+                .eq('organization_id', organization_id)
+                .eq('active', true)
+                .order('start_time')
+            const shiftList = (shiftDefs || []) as Shift[]
+
+            // Fetch actual POS sales by runner+shift for today
             const { data: salesData, error: salesErr } = await supabase
                 .from('sales')
-                .select('seller_id, total')
+                .select('seller_id, shift_id, total, created_at')
                 .eq('organization_id', organization_id)
                 .eq('status', 'CONFIRMED')
                 .gte('created_at', `${today}T00:00:00-05:00`)
@@ -512,39 +524,47 @@ export function useRunnerSummary() {
 
             if (salesErr) throw salesErr
 
-            // Build POS sales map per runner
-            const posSalesByRunner: Record<string, number> = {}
+            // Build POS sales map per runner+shift (resolving null shift_ids by time)
+            const posSalesMap: Record<string, number> = {}
             for (const sale of salesData || []) {
                 if (!sale.seller_id) continue
-                posSalesByRunner[sale.seller_id] = (posSalesByRunner[sale.seller_id] || 0) + (sale.total || 0)
+                const resolvedShift = resolveShiftId(sale, shiftList)
+                const key = `${sale.seller_id}__${resolvedShift || 'none'}`
+                posSalesMap[key] = (posSalesMap[key] || 0) + (sale.total || 0)
             }
 
-            // Group inventory by runner
+            // Group inventory by runner + shift
             const summary = (inventoryData || []).reduce((acc: any, item: any) => {
                 const runnerId = item.runner_id
-                if (!acc[runnerId]) {
-                    acc[runnerId] = {
+                const shiftId = item.shift_id || 'none'
+                const groupKey = `${runnerId}__${shiftId}`
+                if (!acc[groupKey]) {
+                    acc[groupKey] = {
                         runner_id: runnerId,
+                        shift_id: item.shift_id || null,
+                        shift_name: (item.shift as any)?.name || null,
                         runner_name: item.runner?.full_name || 'Sin nombre',
                         total_assigned: 0,
                         total_returned: 0,
-                        total_sold_inv: 0,   // from inventory math
-                        total_value_inv: 0,  // estimated from inventory
-                        total_pos_sales: 0,  // real POS sales
+                        total_sold_inv: 0,
+                        total_value_inv: 0,
+                        total_pos_sales: 0,
                         active_assignments: 0
                     }
                 }
-                acc[runnerId].total_assigned += item.assigned_qty
-                acc[runnerId].total_returned += item.returned_qty
-                acc[runnerId].total_sold_inv += item.sold_qty
-                acc[runnerId].total_value_inv += item.sold_qty * (item.product?.price || 0)
-                if (item.status === 'active') acc[runnerId].active_assignments++
+                acc[groupKey].total_assigned += item.assigned_qty
+                acc[groupKey].total_returned += item.returned_qty
+                acc[groupKey].total_sold_inv += item.sold_qty
+                acc[groupKey].total_value_inv += item.sold_qty * (item.product?.price || 0)
+                if (item.status === 'active') acc[groupKey].active_assignments++
                 return acc
             }, {})
 
             // Merge POS sales into summary
-            for (const runnerId of Object.keys(summary)) {
-                summary[runnerId].total_pos_sales = posSalesByRunner[runnerId] || 0
+            for (const groupKey of Object.keys(summary)) {
+                const entry = summary[groupKey]
+                const salesKey = `${entry.runner_id}__${entry.shift_id || 'none'}`
+                entry.total_pos_sales = posSalesMap[salesKey] || 0
             }
 
             return Object.values(summary)
@@ -589,7 +609,23 @@ export function useMonthlyRunnerInventory(startDate: Date, endDate: Date) {
     })
 }
 
-// Returns POS sales keyed by `${runnerId}__${date}` for all given dates
+// Helper: determine shift_id from sale time using shift definitions
+function resolveShiftId(sale: { shift_id: string | null; created_at: string }, shifts: Shift[]): string | null {
+    if (sale.shift_id) return sale.shift_id
+    if (!shifts.length) return null
+    // Get Colombia time HH:mm from created_at
+    const d = new Date(sale.created_at)
+    const colombiaTime = d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+    for (const shift of shifts) {
+        const start = shift.start_time.slice(0, 5)
+        const end = shift.end_time.slice(0, 5)
+        if (colombiaTime >= start && colombiaTime < end) return shift.id
+    }
+    return null
+}
+
+// Returns POS sales keyed by `${runnerId}__${date}__${shiftId||'none'}` for all given dates
+// Also keeps legacy key `${runnerId}__${date}` with the total (for calendar/other consumers)
 export function useRunnerPOSSalesByDates(dates: string[]) {
     const supabase = createClient()
     return useQuery({
@@ -597,11 +633,21 @@ export function useRunnerPOSSalesByDates(dates: string[]) {
         queryFn: async () => {
             if (dates.length === 0) return {} as Record<string, number>
             const { organization_id } = await getOrCreateProfile(supabase)
+
+            // Fetch shift definitions to resolve null shift_ids by time
+            const { data: shifts } = await supabase
+                .from('shifts')
+                .select('*')
+                .eq('organization_id', organization_id)
+                .eq('active', true)
+                .order('start_time')
+            const shiftList = (shifts || []) as Shift[]
+
             const result: Record<string, number> = {}
             await Promise.all(dates.map(async (date) => {
                 const { data, error } = await supabase
                     .from('sales')
-                    .select('seller_id, total')
+                    .select('seller_id, total, shift_id, created_at')
                     .eq('organization_id', organization_id)
                     .eq('status', 'CONFIRMED')
                     .gte('created_at', `${date}T00:00:00-05:00`)
@@ -609,8 +655,13 @@ export function useRunnerPOSSalesByDates(dates: string[]) {
                 if (error) return
                 for (const sale of data || []) {
                     if (!sale.seller_id) continue
-                    const key = `${sale.seller_id}__${date}`
-                    result[key] = (result[key] || 0) + (sale.total || 0)
+                    const resolvedShift = resolveShiftId(sale, shiftList)
+                    // Key per shift
+                    const shiftKey = `${sale.seller_id}__${date}__${resolvedShift || 'none'}`
+                    result[shiftKey] = (result[shiftKey] || 0) + (sale.total || 0)
+                    // Legacy key (total per runner+date, used by calendar)
+                    const legacyKey = `${sale.seller_id}__${date}`
+                    result[legacyKey] = (result[legacyKey] || 0) + (sale.total || 0)
                 }
             }))
             return result

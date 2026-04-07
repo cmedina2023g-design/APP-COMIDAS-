@@ -62,16 +62,17 @@ export default function CorredoresPage() {
     }, [inventory])
     const { data: posSalesByDate = {} } = useRunnerPOSSalesByDates(blockDates)
     const [assignOpen, setAssignOpen] = useState(false)
-    const [closingRunner, setClosingRunner] = useState<{ id: string; name: string; date: string } | null>(null)
-    const [editingRunner, setEditingRunner] = useState<{ id: string; name: string; date: string } | null>(null)
+    const [closingRunner, setClosingRunner] = useState<{ id: string; name: string; date: string; shiftId: string | null; shiftName: string | null } | null>(null)
+    const [editingRunner, setEditingRunner] = useState<{ id: string; name: string; date: string; shiftId: string | null } | null>(null)
     const [expandedRunners, setExpandedRunners] = useState<Record<string, boolean>>({})
 
-    // One block per (runner + date). Within each block, events grouped by assigned_at.
+    // One block per (runner + date + shift). Within each block, events grouped by assigned_at.
     const blocks = useMemo(() => {
         type Event = { assignedAt: string; assignerName: string | null; items: any[]; hasActive: boolean }
         type Block = {
             key: string; runnerId: string; runner: any; date: string; isToday: boolean
-            dateLabel: string; events: Event[]; hasActive: boolean
+            dateLabel: string; shiftId: string | null; shiftName: string | null
+            events: Event[]; hasActive: boolean
             // flat items list for bulk return (all events merged)
             allItems: any[]
             // all items including closed events (for admin edit modal)
@@ -86,13 +87,15 @@ export default function CorredoresPage() {
                 ? new Date(item.assigned_at).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
                 : (item.assignment_date as string)
             const isToday = date === today
-            const blockKey = `${rid}__${date}`
+            const shiftId = item.shift_id || null
+            const shiftName = (item as any).shift?.name || null
+            const blockKey = `${rid}__${date}__${shiftId || 'none'}`
 
             if (!map[blockKey]) {
                 const dateLabel = isToday
                     ? 'Hoy'
                     : new Date(date + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
-                map[blockKey] = { key: blockKey, runnerId: rid, runner: item.runner, date, isToday, dateLabel, events: [], hasActive: false, allItems: [], allItemsAll: [] }
+                map[blockKey] = { key: blockKey, runnerId: rid, runner: item.runner, date, isToday, dateLabel, shiftId, shiftName, events: [], hasActive: false, allItems: [], allItemsAll: [] }
             }
             const block = map[blockKey]
 
@@ -204,7 +207,7 @@ export default function CorredoresPage() {
                         const assigned = allProducts.reduce((s: number, i: any) => s + i.assigned_qty, 0)
                         const returned = allProducts.reduce((s: number, i: any) => s + i.returned_qty, 0)
                         const estimatedValue = allProducts.reduce((s: number, i: any) => s + (i.assigned_qty - i.returned_qty) * (i.product?.price || 0), 0)
-                        const posKey = `${block.runnerId}__${block.date}`
+                        const posKey = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}`
                         const posAmount: number | null = posKey in posSalesByDate ? posSalesByDate[posKey] : null
                         return (
                             <Card
@@ -233,7 +236,14 @@ export default function CorredoresPage() {
                                             : <Badge variant="secondary" className="text-xs">Cerrado</Badge>
                                         }
                                     </div>
-                                    <p className="text-xs text-slate-400 mb-3 pl-6">{block.dateLabel}</p>
+                                    <div className="flex items-center gap-2 pl-6 mb-3">
+                                        <p className="text-xs text-slate-400">{block.dateLabel}</p>
+                                        {block.shiftName && (
+                                            <Badge variant="outline" className="text-[10px] font-semibold">
+                                                {block.shiftName === 'Mañana' ? '☀️' : '🌙'} {block.shiftName}
+                                            </Badge>
+                                        )}
+                                    </div>
 
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="bg-slate-50 rounded-lg p-2 text-center">
@@ -329,14 +339,14 @@ export default function CorredoresPage() {
                                                 <div className="shrink-0">
                                                     {block.hasActive && (
                                                         <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white text-xs"
-                                                            onClick={(e) => { e.stopPropagation(); setClosingRunner({ id: block.runnerId, name: block.runner?.full_name || 'Corredor', date: block.date }) }}>
+                                                            onClick={(e) => { e.stopPropagation(); setClosingRunner({ id: block.runnerId, name: block.runner?.full_name || 'Corredor', date: block.date, shiftId: block.shiftId, shiftName: block.shiftName }) }}>
                                                             <RotateCcw className="h-3.5 w-3.5 sm:mr-1.5" />
                                                             <span className="hidden sm:inline">Cerrar Turno</span>
                                                         </Button>
                                                     )}
                                                     {!block.hasActive && currentProfile?.role === 'ADMIN' && block.events.length > 0 && (
                                                         <Button size="sm" variant="outline" className="text-slate-500 hover:text-orange-600 hover:border-orange-200 text-xs"
-                                                            onClick={(e) => { e.stopPropagation(); setEditingRunner({ id: block.runnerId, name: block.runner?.full_name || 'Corredor', date: block.date }) }}>
+                                                            onClick={(e) => { e.stopPropagation(); setEditingRunner({ id: block.runnerId, name: block.runner?.full_name || 'Corredor', date: block.date, shiftId: block.shiftId }) }}>
                                                             <Pencil className="h-3.5 w-3.5 sm:mr-1.5" />
                                                             <span className="hidden sm:inline">Editar Devolución</span>
                                                         </Button>
@@ -347,6 +357,11 @@ export default function CorredoresPage() {
                                                 <Badge variant="outline" className={cn("text-[10px]", !block.isToday && "border-orange-300 text-orange-700 bg-orange-50")}>
                                                     {block.dateLabel}
                                                 </Badge>
+                                                {block.shiftName && (
+                                                    <Badge variant="outline" className="text-[10px] font-semibold">
+                                                        {block.shiftName === 'Mañana' ? '☀️' : '🌙'} {block.shiftName}
+                                                    </Badge>
+                                                )}
                                                 <Badge variant="outline" className="text-[10px] text-slate-500">
                                                     {block.events.length} asig. · {uniqueProducts} prod.
                                                 </Badge>
@@ -414,12 +429,13 @@ export default function CorredoresPage() {
 
             {/* Bulk Return Modal */}
             {closingRunner && (() => {
-                const block = blocks.find(b => b.runnerId === closingRunner.id && b.date === closingRunner.date)
+                const block = blocks.find(b => b.runnerId === closingRunner.id && b.date === closingRunner.date && b.shiftId === closingRunner.shiftId)
+                const shiftLabel = closingRunner.shiftName ? ` · ${closingRunner.shiftName}` : ''
                 return (
                     <BulkReturnModal
                         runnerId={closingRunner.id}
                         runnerName={closingRunner.name}
-                        dateLabel={block?.dateLabel || closingRunner.date}
+                        dateLabel={(block?.dateLabel || closingRunner.date) + shiftLabel}
                         items={block?.allItems || []}
                         onClose={() => setClosingRunner(null)}
                     />
@@ -428,7 +444,7 @@ export default function CorredoresPage() {
 
             {/* Admin Edit Return Modal */}
             {editingRunner && (() => {
-                const block = blocks.find(b => b.runnerId === editingRunner.id && b.date === editingRunner.date)
+                const block = blocks.find(b => b.runnerId === editingRunner.id && b.date === editingRunner.date && b.shiftId === editingRunner.shiftId)
                 return (
                     <AdminEditReturnModal
                         runnerId={editingRunner.id}
