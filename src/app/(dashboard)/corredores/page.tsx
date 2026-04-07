@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -288,12 +289,12 @@ export default function CorredoresPage() {
                                                     )
                                                 })}
                                                 {/* Runner subtotals */}
-                                                {runnerSummary && (
+                                                {items.length > 0 && (
                                                     <div className="grid grid-cols-4 gap-2 px-4 py-2 bg-slate-100 text-xs font-bold text-slate-600 border-t-2">
                                                         <span>TOTAL</span>
-                                                        <span className="text-center">{runnerSummary.total_assigned}</span>
-                                                        <span className="text-center text-yellow-700">{runnerSummary.total_returned}</span>
-                                                        <span className="text-center text-green-700">{runnerSummary.total_sold_inv}</span>
+                                                        <span className="text-center">{items.reduce((s, i) => s + i.assigned_qty, 0)}</span>
+                                                        <span className="text-center text-yellow-700">{items.reduce((s, i) => s + i.returned_qty, 0)}</span>
+                                                        <span className="text-center text-green-700">{items.reduce((s, i) => s + (i.assigned_qty - i.returned_qty), 0)}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -753,7 +754,15 @@ function AssignInventoryDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         const items = Object.entries(quantities)
             .filter(([_, qty]) => qty > 0)
             .map(([product_id, qty]) => ({ product_id, qty }))
-        if (!selectedRunner || items.length === 0) return
+
+        if (!selectedRunner) {
+            toast.error('Selecciona un corredor')
+            return
+        }
+        if (items.length === 0) {
+            toast.error('Agrega al menos un producto con cantidad mayor a 0')
+            return
+        }
 
         assignInventory.mutate({
             runner_id: selectedRunner,

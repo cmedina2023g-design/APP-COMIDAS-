@@ -485,7 +485,7 @@ export default function DashboardPage() {
                                         <div className="text-right">
                                             <div className="font-bold text-slate-900">${sale.total.toLocaleString()}</div>
                                             <Badge variant="outline" className="text-[10px] font-semibold">
-                                                {sale.payment_method}
+                                                {sale.payments.map(p => p.method).join(' + ') || 'Desconocido'}
                                             </Badge>
                                         </div>
                                     </div>

@@ -267,7 +267,7 @@ export function useCreateProfile() {
     return useMutation({
         mutationFn: async (profile: {
             full_name: string
-            role: 'admin' | 'cashier' | 'runner'
+            role: 'ADMIN' | 'SELLER' | 'RUNNER'
         }) => {
             const { organization_id } = await getOrCreateProfile(supabase)
 
@@ -505,8 +505,8 @@ export function useRunnerSummary() {
                 .select('seller_id, total')
                 .eq('organization_id', organization_id)
                 .eq('status', 'CONFIRMED')
-                .gte('created_at', `${today}T00:00:00`)
-                .lte('created_at', `${today}T23:59:59`)
+                .gte('created_at', `${today}T00:00:00-05:00`)
+                .lte('created_at', `${today}T23:59:59-05:00`)
 
             if (salesErr) throw salesErr
 

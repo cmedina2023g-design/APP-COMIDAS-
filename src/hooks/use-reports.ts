@@ -84,7 +84,7 @@ export type RunnerSaleDetail = {
     id: string
     created_at: string
     total: number
-    payment_method: string
+    payments: { method: string; amount: number }[]
     items: {
         product_name: string
         qty: number
@@ -102,6 +102,8 @@ export function useRunnerSaleDetails(sellerId: string | null, startDate: Date, e
         enabled: !!sellerId,
         queryFn: async () => {
             if (!sellerId) return []
+
+            const { organization_id } = await getOrCreateProfile(supabase)
 
             const { data, error } = await supabase
                 .from('sales')
@@ -123,6 +125,7 @@ export function useRunnerSaleDetails(sellerId: string | null, startDate: Date, e
                 `)
                 .eq('seller_id', sellerId)
                 .eq('status', 'CONFIRMED')
+                .eq('organization_id', organization_id)
                 .gte('created_at', startDate.toISOString())
                 .lte('created_at', endDate.toISOString())
                 .order('created_at', { ascending: false })
@@ -133,10 +136,10 @@ export function useRunnerSaleDetails(sellerId: string | null, startDate: Date, e
                 id: sale.id,
                 created_at: sale.created_at,
                 total: sale.total,
-                payment_method: sale.sale_payments
-                    ?.map((sp: any) => sp.payment_method?.name)
-                    .filter(Boolean)
-                    .join(' + ') || 'Desconocido',
+                payments: sale.sale_payments?.map((sp: any) => ({
+                    method: sp.payment_method?.name || 'Desconocido',
+                    amount: sp.amount || 0
+                })) || [],
                 items: sale.sale_items?.map((item: any) => ({
                     product_name: item.product?.name || 'Producto',
                     qty: item.qty,

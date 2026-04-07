@@ -25,18 +25,12 @@ export function RunnerDailySummary({ runnerId, runnerName }: RunnerDailySummaryP
         const totalAmount = sales.reduce((acc, sale) => acc + sale.total, 0)
         const txCount = sales.length
 
-        // Group by payment method
+        // Group by individual payment method using real amounts per method
         const paymentMap = new Map<string, number>()
         sales.forEach(sale => {
-            // sale.payment_method could be "EFECTIVO + Nequi", but useRunnerSaleDetails returned it explicitly formatted.
-            // Wait, sale_payments allows exact breakdown per payment. 
-            // In useRunnerSaleDetails, payment_method is just a joined string if multiple.
-            // But we don't have separate amounts per payment method there!
-            // Wait, useRunnerSaleDetails doesn't return amounts per method, just the names joined.
-            // Oh right, it maps `sale_payments` to just a string. 
-            // We can still group by that exact string.
-            const method = sale.payment_method || 'Desconocido'
-            paymentMap.set(method, (paymentMap.get(method) || 0) + sale.total)
+            sale.payments.forEach(p => {
+                paymentMap.set(p.method, (paymentMap.get(p.method) || 0) + p.amount)
+            })
         })
 
         const breakdowns = Array.from(paymentMap.entries()).map(([method, amount]) => ({
@@ -127,7 +121,7 @@ export function RunnerDailySummary({ runnerId, runnerName }: RunnerDailySummaryP
                                 </p>
                             </div>
                             <div className="text-right">
-                                <p className="text-xs font-semibold text-slate-600">{sale.payment_method}</p>
+                                <p className="text-xs font-semibold text-slate-600">{sale.payments.map(p => p.method).join(' + ') || 'Desconocido'}</p>
                                 <p className="text-xs text-slate-500">{sale.items.length} items</p>
                             </div>
                         </div>
