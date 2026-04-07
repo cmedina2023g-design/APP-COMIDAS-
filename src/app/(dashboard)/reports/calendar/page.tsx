@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useMonthlyReport, useRunnerSales } from '@/hooks/use-reports'
 import { useReceivables } from '@/hooks/use-sales'
-import { useShiftSales, useShiftPaymentMethods, useRunnerPaymentMethods } from '@/hooks/use-sessions'
+import { useShiftSales, useShiftPaymentMethods, useRunnerPaymentMethods, useMonthlyRunnerInventory } from '@/hooks/use-sessions'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isSameDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Loader2, TrendingUp, TrendingDown, DollarSign, Award, AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Sun, Moon, UserCircle, Store, CheckCircle2, ArrowRight } from 'lucide-react'
@@ -40,6 +40,9 @@ export default function CalendarReportPage() {
 
     // Fetch Runner Payment Breakdown
     const { data: runnerPaymentMethods } = useRunnerPaymentMethods(startOfMonth(currentDate), endOfMonth(currentDate))
+
+    // Fetch monthly runner inventory (for dialog)
+    const { data: monthlyInventory = [] } = useMonthlyRunnerInventory(startOfMonth(currentDate), endOfMonth(currentDate))
 
     const handlePrevMonth = () => {
         setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
@@ -308,12 +311,13 @@ export default function CalendarReportPage() {
                 runnerSales={runnerSales}
                 paymentMethods={paymentMethods}
                 runnerPaymentMethods={runnerPaymentMethods}
+                monthlyInventory={monthlyInventory}
             />
         </div>
     )
 }
 
-function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSales, paymentMethods, runnerPaymentMethods }: {
+function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSales, paymentMethods, runnerPaymentMethods, monthlyInventory }: {
     isOpen: boolean
     onClose: () => void
     date: Date | null
@@ -322,6 +326,7 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
     runnerSales: any[] | undefined
     paymentMethods: any[] | undefined
     runnerPaymentMethods: any[] | undefined
+    monthlyInventory: any[]
 }) {
     if (!date) return null
     const dateStr = format(date, 'yyyy-MM-dd')
@@ -330,9 +335,11 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
     const dayShifts = shiftSales?.filter(s => s.sale_date === dateStr) || []
     const morningShift = dayShifts.find(s => s.shift_name === 'Mañana')
     const afternoonShift = dayShifts.find(s => s.shift_name === 'Tarde')
+    const noShiftEntry = dayShifts.find(s => s.shift_name === null || s.shift_name === undefined)
     const morningSales = morningShift?.total_sales || 0
     const afternoonSales = afternoonShift?.total_sales || 0
-    const totalShiftSales = morningSales + afternoonSales
+    const noShiftSales = noShiftEntry?.total_sales || 0
+    const totalShiftSales = morningSales + afternoonSales + noShiftSales
 
     // Get Stats
     const dayStats = report?.daily_stats.find((s: any) => s.date.startsWith(dateStr))
@@ -345,6 +352,26 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
 
     // Get Runners
     const dayRunners = runnerSales?.filter((r: any) => r.sale_date === dateStr) || []
+
+    // Runner inventory for this day (use Colombia date from assigned_at)
+    const dayInventoryRows = monthlyInventory.filter(row => {
+        const colDate = row.assigned_at
+            ? new Date(row.assigned_at).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+            : row.assignment_date
+        return colDate === dateStr
+    })
+    // Group by runner
+    const inventoryByRunner: Record<string, { name: string; assigned: number; returned: number; status: string }> = {}
+    for (const row of dayInventoryRows) {
+        const rid = row.runner_id
+        if (!inventoryByRunner[rid]) {
+            inventoryByRunner[rid] = { name: (row.runner as any)?.full_name || 'Corredor', assigned: 0, returned: 0, status: row.status }
+        }
+        inventoryByRunner[rid].assigned += row.assigned_qty || 0
+        inventoryByRunner[rid].returned += row.returned_qty || 0
+        if (row.status === 'active') inventoryByRunner[rid].status = 'active'
+    }
+    const dayInventorySummary = Object.values(inventoryByRunner)
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -448,6 +475,20 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
                                 )
                             })()}
                         </div>
+
+                        {/* Corredores (sin turno) — compact row, detail shown below */}
+                        {noShiftSales > 0 && (
+                            <div className="flex items-center justify-between px-3 py-2 rounded-md border border-slate-200 bg-slate-50">
+                                <div className="flex items-center gap-2">
+                                    <UserCircle className="h-4 w-4 text-slate-400" />
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-600">Corredores</p>
+                                        <p className="text-xs text-muted-foreground">{noShiftEntry?.transaction_count || 0} ventas · ver detalle abajo</p>
+                                    </div>
+                                </div>
+                                <p className="font-bold text-slate-700">${noShiftSales.toLocaleString()}</p>
+                            </div>
+                        )}
                     </div>
 
                     {/* Runners Section */}
@@ -520,6 +561,31 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
                             * Solo muestra ventas registradas en la App (POS).
                         </p>
                     </div>
+
+                    {/* Runner Inventory Section */}
+                    {dayInventorySummary.length > 0 && (
+                        <div className="space-y-2 pt-2 border-t">
+                            <h4 className="text-sm font-semibold text-slate-700">Inventario Corredores</h4>
+                            <div className="grid grid-cols-4 gap-1 text-[10px] font-medium text-slate-400 uppercase px-1">
+                                <span className="col-span-2">Corredor</span>
+                                <span className="text-center">Asignado</span>
+                                <span className="text-center">Devuelto</span>
+                            </div>
+                            {dayInventorySummary.map((inv, i) => {
+                                return (
+                                    <div key={i} className="grid grid-cols-4 gap-1 items-center bg-slate-50 rounded px-2 py-1.5 border text-sm">
+                                        <div className="col-span-2 flex items-center gap-1.5">
+                                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${inv.status === 'active' ? 'bg-orange-400' : 'bg-green-400'}`} />
+                                            <span className="font-medium truncate">{inv.name}</span>
+                                        </div>
+                                        <span className="text-center text-slate-600">{inv.assigned}</span>
+                                        <span className="text-center text-yellow-600">{inv.returned}</span>
+                                    </div>
+                                )
+                            })}
+                            <p className="text-[10px] text-slate-400">● naranja = sin cerrar · ● verde = cerrado · Vendido = Asignado − Devuelto</p>
+                        </div>
+                    )}
 
                     {/* Expenses Section */}
                     {expenses > 0 && (

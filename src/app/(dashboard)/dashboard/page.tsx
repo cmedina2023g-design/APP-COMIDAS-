@@ -3,10 +3,10 @@
 import React, { useState } from 'react'
 import { useDashboardStats } from '@/hooks/use-dashboard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { DollarSign, CreditCard, ShoppingBag, AlertTriangle, ArrowUpRight, ArrowDownRight, Sun, Moon, UserCircle, UtensilsCrossed } from 'lucide-react'
+import { DollarSign, CreditCard, ShoppingBag, AlertTriangle, ArrowUpRight, ArrowDownRight, Sun, Moon, UserCircle, UtensilsCrossed, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { useShiftSales, useShiftPaymentMethods, useRunnerPaymentMethods, useShifts } from '@/hooks/use-sessions'
+import { useShiftSales, useShiftPaymentMethods, useRunnerPaymentMethods, useShifts, useRunnerSummary } from '@/hooks/use-sessions'
 import { useRunnerSales, useRunnerSaleDetails } from '@/hooks/use-reports'
 import { format, startOfDay, endOfDay } from 'date-fns'
 import { useAllEmployeesSummary } from '@/hooks/use-employee-meals'
@@ -32,6 +32,7 @@ export default function DashboardPage() {
         endOfDay(today)
     )
     const { data: employeeMeals = [] } = useAllEmployeesSummary(mealsDate)
+    const { data: runnerSummary = [] } = useRunnerSummary()
 
     // Get time for display
     const morningShift = shifts?.find(s => s.name === 'Mañana')
@@ -228,52 +229,69 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* Runner Sales Section */}
-            {runnerSales && runnerSales.length > 0 && (
+            {/* Corredores Hoy — inventory + POS sales combined */}
+            {(runnerSummary as any[]).length > 0 && (
                 <div>
-                    <h3 className="text-lg font-semibold mb-3">Ventas por Corredor (Hoy)</h3>
+                    <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                        <Package className="h-5 w-5 text-orange-600" />
+                        Corredores Hoy
+                    </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {runnerSales.map((runner: any, i: number) => (
-                            <Card
-                                key={i}
-                                className="border-t-4 border-t-blue-500 cursor-pointer hover:shadow-md transition-shadow hover:border-t-blue-600"
-                                onClick={() => setSelectedRunner({ id: runner.runner_id ?? '', name: runner.runner_name })}
-                            >
-                                <CardContent className="pt-4">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <UserCircle className="h-5 w-5 text-blue-500" />
-                                            <span className="font-medium">{runner.runner_name}</span>
-                                            <span className="text-[10px] text-blue-400 font-semibold">VER DETALLE →</span>
+                        {(runnerSummary as any[]).map((runner: any) => {
+                            const posSale = runnerSales?.find((r: any) => r.runner_id === runner.runner_id)
+                            const posTotal = posSale ? Number(posSale.total_sales) : 0
+                            const isActive = runner.active_assignments > 0
+                            return (
+                                <Card
+                                    key={runner.runner_id}
+                                    className={`border-t-4 ${isActive ? 'border-t-green-500' : 'border-t-slate-300'} ${posSale ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                                    onClick={() => posSale ? setSelectedRunner({ id: runner.runner_id, name: runner.runner_name }) : null}
+                                >
+                                    <CardContent className="pt-4">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <UserCircle className={`h-5 w-5 ${isActive ? 'text-green-500' : 'text-slate-400'}`} />
+                                                <span className="font-medium">{runner.runner_name}</span>
+                                            </div>
+                                            <Badge className={isActive ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-600'}>
+                                                {isActive ? 'En ruta' : 'Cerrado'}
+                                            </Badge>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="font-bold text-lg">${parseFloat(runner.total_sales).toLocaleString()}</p>
-                                            <p className="text-xs text-muted-foreground">{runner.transaction_count} ventas</p>
+                                        <div className="grid grid-cols-2 gap-2 text-center text-sm mt-2">
+                                            <div className="bg-slate-50 rounded p-1.5">
+                                                <p className="text-[10px] text-slate-500 uppercase font-medium">Asignado</p>
+                                                <p className="font-bold text-slate-800">{runner.total_assigned}</p>
+                                            </div>
+                                            <div className="bg-green-50 rounded p-1.5">
+                                                <p className="text-[10px] text-green-600 uppercase font-medium">Ventas POS</p>
+                                                <p className="font-bold text-green-700">${posTotal.toLocaleString()}</p>
+                                            </div>
                                         </div>
-                                    </div>
-
-                                    {/* Payment Breakdown */}
-                                    {(() => {
-                                        const rMethods = runnerPaymentMethods?.filter((pm: any) =>
-                                            pm.runner_name === runner.runner_name
-                                        ) || []
-
-                                        if (rMethods.length > 0) {
-                                            return (
-                                                <div className="border-t pt-2 mt-2 space-y-1">
-                                                    {rMethods.map((rpm: any, idx: number) => (
-                                                        <div key={idx} className="flex justify-between text-xs text-slate-600">
-                                                            <span>{rpm.payment_method}</span>
-                                                            <span className="font-medium">${parseFloat(rpm.total_amount).toLocaleString()}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )
-                                        }
-                                    })()}
-                                </CardContent>
-                            </Card>
-                        ))}
+                                        {posSale && (
+                                            <p className="text-[10px] text-blue-400 font-semibold mt-2 text-center">VER DETALLE →</p>
+                                        )}
+                                        {/* Payment Breakdown */}
+                                        {(() => {
+                                            const rMethods = runnerPaymentMethods?.filter((pm: any) =>
+                                                pm.runner_name === runner.runner_name
+                                            ) || []
+                                            if (rMethods.length > 0) {
+                                                return (
+                                                    <div className="border-t pt-2 mt-2 space-y-1">
+                                                        {rMethods.map((rpm: any, idx: number) => (
+                                                            <div key={idx} className="flex justify-between text-xs text-slate-600">
+                                                                <span>{rpm.payment_method}</span>
+                                                                <span className="font-medium">${parseFloat(rpm.total_amount).toLocaleString()}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )
+                                            }
+                                        })()}
+                                    </CardContent>
+                                </Card>
+                            )
+                        })}
                     </div>
                 </div>
             )}

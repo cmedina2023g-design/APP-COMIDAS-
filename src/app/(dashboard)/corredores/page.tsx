@@ -21,7 +21,9 @@ import {
     RotateCcw,
     TrendingUp,
     Users,
-    Pencil
+    Pencil,
+    AlertTriangle,
+    Clock
 } from 'lucide-react'
 import Link from 'next/link'
 import {
@@ -29,9 +31,10 @@ import {
     useRunnerInventory,
     useAssignInventory,
     useBulkReturnInventory,
-    useRunnerSummary,
     useShifts,
-    useAdminEditClosedReturns
+    useAdminEditClosedReturns,
+    useUnclosedPreviousAssignments,
+    useRunnerPOSSalesByDates
 } from '@/hooks/use-sessions'
 import { useProducts } from '@/hooks/use-products'
 import { useCurrentProfile } from '@/hooks/use-profiles'
@@ -42,54 +45,100 @@ import { cn } from '@/lib/utils'
 // ─────────────────────────────────────────────
 export default function CorredoresPage() {
     const { data: inventory, isLoading, refetch } = useRunnerInventory()
-    const { data: summary } = useRunnerSummary()
     const { data: currentProfile } = useCurrentProfile()
+    const { data: unclosed = [] } = useUnclosedPreviousAssignments()
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+
+    // Derive all unique Colombia dates present in inventory (for POS sales lookup)
+    const blockDates = useMemo(() => {
+        const dates = new Set<string>()
+        for (const item of inventory || []) {
+            const d = item.assigned_at
+                ? new Date(item.assigned_at).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+                : (item.assignment_date as string)
+            dates.add(d)
+        }
+        return Array.from(dates)
+    }, [inventory])
+    const { data: posSalesByDate = {} } = useRunnerPOSSalesByDates(blockDates)
     const [assignOpen, setAssignOpen] = useState(false)
-    const [closingRunner, setClosingRunner] = useState<{ id: string; name: string } | null>(null)
-    const [editingRunner, setEditingRunner] = useState<{ id: string; name: string } | null>(null)
+    const [closingRunner, setClosingRunner] = useState<{ id: string; name: string; date: string } | null>(null)
+    const [editingRunner, setEditingRunner] = useState<{ id: string; name: string; date: string } | null>(null)
     const [expandedRunners, setExpandedRunners] = useState<Record<string, boolean>>({})
 
-    // Group inventory by runner, then aggregate duplicate products
-    const byRunner = useMemo(() => {
-        const groups: Record<string, { runner: any; items: any[]; rawItems: any[] }> = {}
+    // One block per (runner + date). Within each block, events grouped by assigned_at.
+    const blocks = useMemo(() => {
+        type Event = { assignedAt: string; assignerName: string | null; items: any[]; hasActive: boolean }
+        type Block = {
+            key: string; runnerId: string; runner: any; date: string; isToday: boolean
+            dateLabel: string; events: Event[]; hasActive: boolean
+            // flat items list for bulk return (all events merged)
+            allItems: any[]
+        }
+        const map: Record<string, Block> = {}
+
         for (const item of inventory || []) {
             const rid = item.runner?.id || item.runner_id || 'unknown'
-            if (!groups[rid]) {
-                groups[rid] = { runner: item.runner, items: [], rawItems: [] }
+            // Use Colombia date derived from assigned_at (not assignment_date which may be UTC-shifted)
+            const date = item.assigned_at
+                ? new Date(item.assigned_at).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+                : (item.assignment_date as string)
+            const isToday = date === today
+            const blockKey = `${rid}__${date}`
+
+            if (!map[blockKey]) {
+                const dateLabel = isToday
+                    ? 'Hoy'
+                    : new Date(date + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
+                map[blockKey] = { key: blockKey, runnerId: rid, runner: item.runner, date, isToday, dateLabel, events: [], hasActive: false, allItems: [] }
             }
-            groups[rid].rawItems.push(item)
+            const block = map[blockKey]
+
+            // Find or create event by assigned_at
+            const assignedAt = item.assigned_at || ''
+            let event = block.events.find(e => e.assignedAt === assignedAt)
+            if (!event) {
+                event = { assignedAt, assignerName: (item as any).assigner?.full_name || null, items: [], hasActive: false }
+                block.events.push(event)
+            }
+
+            // Aggregate same product within this event
+            const pid = item.product?.id || item.product_id
+            const existing = event.items.find(p => (p.product?.id || p.product_id) === pid)
+            if (!existing) {
+                event.items.push({ ...item, assigned_qty: item.assigned_qty || 0, returned_qty: item.returned_qty || 0, _ids: [{ id: item.id, assigned_qty: item.assigned_qty }] })
+            } else {
+                existing.assigned_qty += item.assigned_qty || 0
+                existing.returned_qty += item.returned_qty || 0
+                existing._ids.push({ id: item.id, assigned_qty: item.assigned_qty })
+                if (item.status === 'active') existing.status = 'active'
+            }
+            if (item.status === 'active') { event.hasActive = true; block.hasActive = true }
         }
-        // Aggregate products per runner
-        for (const rid of Object.keys(groups)) {
-            const productMap: Record<string, any> = {}
-            for (const item of groups[rid].rawItems) {
-                const pid = item.product?.id || item.product_id
-                if (!productMap[pid]) {
-                    productMap[pid] = {
-                        ...item,
-                        assigned_qty: 0,
-                        returned_qty: 0,
-                        sold_qty: 0,
-                        _ids: [],          // all assignment IDs for bulk return
-                        status: 'closed'   // 'active' if any sub-item is active
-                    }
+
+        // Sort events chronologically; sort products by assigned_qty desc; build allItems for bulk return
+        return Object.values(map).map(block => {
+            block.events.sort((a, b) => a.assignedAt.localeCompare(b.assignedAt))
+            block.events.forEach(e => e.items.sort((a: any, b: any) => b.assigned_qty - a.assigned_qty))
+            // allItems: merge active events only (for Cerrar Turno)
+            const flatMap: Record<string, any> = {}
+            for (const event of block.events) {
+                if (!event.hasActive) continue
+                for (const p of event.items) {
+                    const pid = p.product?.id || p.product_id
+                    if (!flatMap[pid]) flatMap[pid] = { ...p, assigned_qty: 0, returned_qty: 0, _ids: [], status: 'active' }
+                    flatMap[pid].assigned_qty += p.assigned_qty
+                    flatMap[pid].returned_qty += p.returned_qty
+                    flatMap[pid]._ids.push(...p._ids)
                 }
-                productMap[pid].assigned_qty += item.assigned_qty || 0
-                productMap[pid].returned_qty += item.returned_qty || 0
-                productMap[pid].sold_qty += item.sold_qty || 0
-                productMap[pid]._ids.push({ id: item.id, assigned_qty: item.assigned_qty })
-                if (item.status === 'active') productMap[pid].status = 'active'
             }
-            groups[rid].items = Object.values(productMap).sort((a, b) => b.assigned_qty - a.assigned_qty)
-        }
-        return groups
-    }, [inventory])
+            block.allItems = Object.values(flatMap).sort((a, b) => b.assigned_qty - a.assigned_qty)
+            return block
+        }).sort((a, b) => a.date !== b.date ? a.date.localeCompare(b.date) : (a.runner?.full_name || '').localeCompare(b.runner?.full_name || ''))
+    }, [inventory, today])
 
-    const toggleRunner = (id: string) =>
-        setExpandedRunners(prev => ({ ...prev, [id]: !prev[id] }))
-
-    const getSummaryForRunner = (runnerId: string) =>
-        (summary as any[])?.find((s: any) => s.runner_id === runnerId)
+    const toggleBlock = (key: string) =>
+        setExpandedRunners(prev => ({ ...prev, [key]: !prev[key] }))
 
     return (
         <div className="space-y-6">
@@ -113,63 +162,96 @@ export default function CorredoresPage() {
                 </div>
             </div>
 
-            {/* Summary Cards */}
-            {summary && (summary as any[]).length > 0 && (
+            {/* Unclosed previous assignments warning */}
+            {unclosed.length > 0 && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 flex gap-2 items-start">
+                    <AlertTriangle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <p className="text-sm font-semibold text-orange-800">
+                            {unclosed.length === 1 ? '1 corredor tiene' : `${unclosed.length} corredores tienen`} turno sin cerrar de días anteriores
+                        </p>
+                        <ul className="mt-1 space-y-0.5">
+                            {unclosed.map(u => (
+                                <li key={u.runner_id} className="text-xs text-orange-700">
+                                    • {u.runner_name} — {new Date(u.assignment_date + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            )}
+
+            {/* Summary Cards — one per (runner + date) block */}
+            {blocks.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {(summary as any[]).map((runner: any) => (
-                        <Card
-                            key={runner.runner_id}
-                            className="border-t-4 border-t-blue-500 cursor-pointer hover:shadow-md transition-shadow"
-                            onClick={() => {
-                                setExpandedRunners(prev => ({ ...prev, [runner.runner_id]: true }))
-                                setTimeout(() => {
-                                    document.getElementById(`runner-${runner.runner_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                                }, 50)
-                            }}
-                        >
-                            <CardContent className="pt-4 pb-3">
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                        <Users className="h-4 w-4 text-blue-500" />
-                                        <span className="font-semibold text-slate-800">{runner.runner_name}</span>
+                    {blocks.map(block => {
+                        const allProducts = block.events.flatMap(e => e.items)
+                        const assigned = allProducts.reduce((s: number, i: any) => s + i.assigned_qty, 0)
+                        const returned = allProducts.reduce((s: number, i: any) => s + i.returned_qty, 0)
+                        const estimatedValue = allProducts.reduce((s: number, i: any) => s + (i.assigned_qty - i.returned_qty) * (i.product?.price || 0), 0)
+                        const posKey = `${block.runnerId}__${block.date}`
+                        const posAmount: number | null = posKey in posSalesByDate ? posSalesByDate[posKey] : null
+                        return (
+                            <Card
+                                key={block.key}
+                                className={cn(
+                                    "cursor-pointer hover:shadow-md transition-shadow border-t-4",
+                                    block.isToday ? "border-t-blue-500" : "border-t-orange-400"
+                                )}
+                                onClick={() => {
+                                    setExpandedRunners(prev => ({ ...prev, [block.key]: true }))
+                                    setTimeout(() => {
+                                        document.getElementById(`block-${block.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                    }, 50)
+                                }}
+                            >
+                                <CardContent className="pt-4 pb-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <Users className={cn("h-4 w-4", block.isToday ? "text-blue-500" : "text-orange-500")} />
+                                            <span className="font-semibold text-slate-800">{block.runner?.full_name}</span>
+                                        </div>
+                                        {block.hasActive
+                                            ? <Badge className={cn("text-white text-xs", block.isToday ? "bg-green-500" : "bg-orange-500")}>
+                                                {block.isToday ? 'En ruta' : 'Sin cerrar'}
+                                            </Badge>
+                                            : <Badge variant="secondary" className="text-xs">Cerrado</Badge>
+                                        }
                                     </div>
-                                    {runner.active_assignments > 0
-                                        ? <Badge className="bg-green-500 text-white text-xs">En ruta</Badge>
-                                        : <Badge variant="secondary" className="text-xs">Cerrado</Badge>
-                                    }
-                                </div>
+                                    <p className="text-xs text-slate-400 mb-3 pl-6">{block.dateLabel}</p>
 
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-slate-50 rounded-lg p-2 text-center">
-                                        <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mb-0.5">Asignado</p>
-                                        <p className="font-bold text-lg text-slate-800">{runner.total_assigned}</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="bg-slate-50 rounded-lg p-2 text-center">
+                                            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mb-0.5">Asignado</p>
+                                            <p className="font-bold text-base text-slate-800">{assigned}</p>
+                                        </div>
+                                        <div className="bg-yellow-50 rounded-lg p-2 text-center">
+                                            <p className="text-[10px] text-yellow-600 font-medium uppercase tracking-wide mb-0.5">Devuelto</p>
+                                            <p className="font-bold text-base text-yellow-700">{returned}</p>
+                                        </div>
                                     </div>
-                                    <div className="bg-yellow-50 rounded-lg p-2 text-center">
-                                        <p className="text-[10px] text-yellow-600 font-medium uppercase tracking-wide mb-0.5">Devuelto</p>
-                                        <p className="font-bold text-lg text-yellow-700">{runner.total_returned}</p>
-                                    </div>
-                                </div>
 
-                                <div className="mt-3 border-t pt-2 space-y-1">
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-500 flex items-center gap-1">
-                                            <TrendingUp className="h-3 w-3" />
-                                            Ventas POS
-                                        </span>
-                                        <span className="font-bold text-green-600">
-                                            ${(runner.total_pos_sales || 0).toLocaleString()}
-                                        </span>
+                                    <div className="mt-3 border-t pt-2 space-y-1.5">
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-500 flex items-center gap-1">
+                                                <TrendingUp className="h-3 w-3" />
+                                                Ventas POS
+                                            </span>
+                                            <span className="font-bold text-green-600">
+                                                {posAmount !== null ? `$${posAmount.toLocaleString()}` : '$0'}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-400">Estimado inventario</span>
+                                            <span className="font-semibold text-slate-600">
+                                                ${estimatedValue.toLocaleString()}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between items-center text-xs">
-                                        <span className="text-slate-400">Estimado inventario</span>
-                                        <span className="text-slate-600">
-                                            ${(runner.total_value_inv || 0).toLocaleString()}
-                                        </span>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                                </CardContent>
+                            </Card>
+                        )
+                    })}
                 </div>
             )}
 
@@ -178,7 +260,7 @@ export default function CorredoresPage() {
                 <CardHeader className="flex flex-row items-center justify-between pb-3">
                     <CardTitle className="flex items-center gap-2 text-base">
                         <Package className="h-5 w-5 text-orange-600" />
-                        Inventario de Hoy — por Corredor
+                        Inventario por Corredor y Fecha
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -186,10 +268,10 @@ export default function CorredoresPage() {
                         <div className="flex justify-center py-10">
                             <Loader2 className="h-6 w-6 animate-spin text-orange-600" />
                         </div>
-                    ) : Object.keys(byRunner).length === 0 ? (
+                    ) : blocks.length === 0 ? (
                         <div className="text-center py-10 text-muted-foreground">
                             <Package className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                            <p className="font-medium">No hay inventario asignado hoy</p>
+                            <p className="font-medium">No hay inventario asignado</p>
                             <Button className="mt-4" onClick={() => setAssignOpen(true)}>
                                 <Plus className="h-4 w-4 mr-2" />
                                 Asignar Inventario
@@ -197,106 +279,112 @@ export default function CorredoresPage() {
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {Object.entries(byRunner).map(([runnerId, { runner, items }]) => {
-                                const isExpanded = expandedRunners[runnerId] ?? false
-                                const hasActive = items.some(i => i.status === 'active')
-                                const runnerSummary = getSummaryForRunner(runnerId)
+                            {blocks.map(block => {
+                                const isExpanded = expandedRunners[block.key] ?? false
+                                const uniqueProducts = new Set(block.events.flatMap(e => e.items.map((i: any) => i.product?.id || i.product_id))).size
 
                                 return (
-                                    <div key={runnerId} id={`runner-${runnerId}`} className="border rounded-xl overflow-hidden">
-                                        {/* Runner header row */}
+                                    <div key={block.key} id={`block-${block.key}`} className={cn(
+                                        "border rounded-xl overflow-hidden",
+                                        !block.isToday && "border-orange-200"
+                                    )}>
+                                        {/* Block header */}
                                         <div
-                                            className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors"
-                                            onClick={() => toggleRunner(runnerId)}
+                                            className={cn(
+                                                "flex items-center justify-between px-4 py-3 cursor-pointer transition-colors",
+                                                block.isToday ? "bg-slate-50 hover:bg-slate-100" : "bg-orange-50 hover:bg-orange-100"
+                                            )}
+                                            onClick={() => toggleBlock(block.key)}
                                         >
-                                            <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-3 min-w-0">
                                                 {isExpanded
-                                                    ? <ChevronDown className="h-4 w-4 text-slate-400" />
-                                                    : <ChevronRight className="h-4 w-4 text-slate-400" />
+                                                    ? <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                                                    : <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
                                                 }
-                                                <span className="font-semibold text-slate-800">
-                                                    {runner?.full_name || 'Corredor'}
-                                                </span>
-                                                <Badge variant="outline" className="text-xs">
-                                                    {items.length} producto{items.length !== 1 ? 's' : ''}
-                                                </Badge>
-                                                {hasActive
-                                                    ? <Badge className="bg-green-500 text-white text-xs">Activo</Badge>
-                                                    : <Badge variant="secondary" className="text-xs">Cerrado</Badge>
-                                                }
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="font-semibold text-slate-800">{block.runner?.full_name || 'Corredor'}</span>
+                                                        {!block.isToday && <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />}
+                                                        <Badge variant="outline" className={cn("text-xs", !block.isToday && "border-orange-300 text-orange-700 bg-orange-50")}>
+                                                            {block.dateLabel}
+                                                        </Badge>
+                                                        <Badge variant="outline" className="text-xs text-slate-500">
+                                                            {block.events.length} asignación{block.events.length !== 1 ? 'es' : ''} · {uniqueProducts} productos
+                                                        </Badge>
+                                                        {block.hasActive
+                                                            ? <Badge className={cn("text-white text-xs", block.isToday ? "bg-green-500" : "bg-orange-500")}>
+                                                                {block.isToday ? 'Activo' : 'Sin cerrar'}
+                                                            </Badge>
+                                                            : <Badge variant="secondary" className="text-xs">Cerrado</Badge>
+                                                        }
+                                                    </div>
+                                                </div>
                                             </div>
-                                            {hasActive && (
-                                                <Button
-                                                    size="sm"
-                                                    className="bg-orange-500 hover:bg-orange-600 text-white shrink-0"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setClosingRunner({ id: runnerId, name: runner?.full_name || 'Corredor' })
-                                                    }}
-                                                >
-                                                    <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                                                    Cerrar Turno
-                                                </Button>
-                                            )}
-                                            {!hasActive && currentProfile?.role === 'ADMIN' && items.length > 0 && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="shrink-0 text-slate-500 hover:text-orange-600 hover:border-orange-200"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setEditingRunner({ id: runnerId, name: runner?.full_name || 'Corredor' })
-                                                    }}
-                                                >
-                                                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                                                    Editar Devolución
-                                                </Button>
-                                            )}
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                {block.hasActive && (
+                                                    <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white"
+                                                        onClick={(e) => { e.stopPropagation(); setClosingRunner({ id: block.runnerId, name: block.runner?.full_name || 'Corredor', date: block.date }) }}>
+                                                        <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Cerrar Turno
+                                                    </Button>
+                                                )}
+                                                {!block.hasActive && currentProfile?.role === 'ADMIN' && block.events.length > 0 && (
+                                                    <Button size="sm" variant="outline" className="text-slate-500 hover:text-orange-600 hover:border-orange-200"
+                                                        onClick={(e) => { e.stopPropagation(); setEditingRunner({ id: block.runnerId, name: block.runner?.full_name || 'Corredor', date: block.date }) }}>
+                                                        <Pencil className="h-3.5 w-3.5 mr-1.5" />Editar Devolución
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </div>
 
-                                        {/* Items table */}
+                                        {/* Events expanded — each assignment as its own sub-section */}
                                         {isExpanded && (
                                             <div className="divide-y">
-                                                {/* Column headers */}
                                                 <div className="grid grid-cols-4 gap-2 px-4 py-2 bg-white text-xs font-medium text-slate-400 uppercase tracking-wide">
                                                     <span>Producto</span>
                                                     <span className="text-center">Asignado</span>
                                                     <span className="text-center">Devuelto</span>
                                                     <span className="text-center">Vendido</span>
                                                 </div>
-                                                {items.map(item => {
-                                                    const sold = item.assigned_qty - item.returned_qty
+                                                {block.events.map((event, ei) => {
+                                                    const timeLabel = event.assignedAt
+                                                        ? new Date(event.assignedAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' })
+                                                        : ''
+                                                    const eTotal = event.items.reduce((s: any, i: any) => ({ assigned: s.assigned + i.assigned_qty, returned: s.returned + i.returned_qty }), { assigned: 0, returned: 0 })
                                                     return (
-                                                        <div key={item.id} className={cn(
-                                                            "grid grid-cols-4 gap-2 px-4 py-3 items-center text-sm",
-                                                            item.status === 'closed' ? 'bg-slate-50/50 opacity-70' : 'bg-white hover:bg-slate-50'
-                                                        )}>
-                                                            <div>
-                                                                <p className="font-medium text-slate-800">{item.product?.name}</p>
-                                                                {item.status === 'closed' && (
-                                                                    <span className="text-[10px] text-slate-400">Cerrado</span>
-                                                                )}
-                                                            </div>
-                                                            <p className="text-center font-semibold text-slate-700">{item.assigned_qty}</p>
-                                                            <p className="text-center font-semibold text-yellow-600">{item.returned_qty}</p>
-                                                            <p className={cn(
-                                                                "text-center font-bold",
-                                                                sold > 0 ? "text-green-600" : sold < 0 ? "text-red-500" : "text-slate-400"
+                                                        <div key={ei}>
+                                                            {/* Event sub-header */}
+                                                            <div className={cn(
+                                                                "px-4 py-1.5 flex items-center gap-2 text-xs font-semibold",
+                                                                event.hasActive ? "bg-blue-50 text-blue-700" : "bg-slate-50 text-slate-500"
                                                             )}>
-                                                                {sold}
-                                                            </p>
+                                                                <Clock className="h-3 w-3" />
+                                                                <span>{timeLabel}</span>
+                                                                {event.assignerName && <span className="font-normal opacity-70">· por {event.assignerName}</span>}
+                                                                {!event.hasActive && <span className="ml-auto text-[10px]">Cerrado</span>}
+                                                            </div>
+                                                            {event.items.map((item: any) => {
+                                                                const sold = item.assigned_qty - item.returned_qty
+                                                                return (
+                                                                    <div key={`${block.key}-${ei}-${item.product?.id || item.product_id}`} className={cn(
+                                                                        "grid grid-cols-4 gap-2 px-4 py-2.5 items-center text-sm",
+                                                                        !event.hasActive ? 'bg-slate-50/50 opacity-70' : 'bg-white hover:bg-slate-50'
+                                                                    )}>
+                                                                        <p className="font-medium text-slate-800">{item.product?.name}</p>
+                                                                        <p className="text-center font-semibold text-slate-700">{item.assigned_qty}</p>
+                                                                        <p className="text-center font-semibold text-yellow-600">{item.returned_qty}</p>
+                                                                        <p className={cn("text-center font-bold", sold > 0 ? "text-green-600" : sold < 0 ? "text-red-500" : "text-slate-400")}>{sold}</p>
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                            <div className={cn("grid grid-cols-4 gap-2 px-4 py-1.5 text-xs font-bold border-t", event.hasActive ? "bg-blue-50/50 text-blue-800" : "bg-slate-100 text-slate-500")}>
+                                                                <span>Subtotal</span>
+                                                                <span className="text-center">{eTotal.assigned}</span>
+                                                                <span className="text-center">{eTotal.returned}</span>
+                                                                <span className="text-center">{eTotal.assigned - eTotal.returned}</span>
+                                                            </div>
                                                         </div>
                                                     )
                                                 })}
-                                                {/* Runner subtotals */}
-                                                {items.length > 0 && (
-                                                    <div className="grid grid-cols-4 gap-2 px-4 py-2 bg-slate-100 text-xs font-bold text-slate-600 border-t-2">
-                                                        <span>TOTAL</span>
-                                                        <span className="text-center">{items.reduce((s, i) => s + i.assigned_qty, 0)}</span>
-                                                        <span className="text-center text-yellow-700">{items.reduce((s, i) => s + i.returned_qty, 0)}</span>
-                                                        <span className="text-center text-green-700">{items.reduce((s, i) => s + (i.assigned_qty - i.returned_qty), 0)}</span>
-                                                    </div>
-                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -308,24 +396,31 @@ export default function CorredoresPage() {
             </Card>
 
             {/* Bulk Return Modal */}
-            {closingRunner && (
-                <BulkReturnModal
-                    runnerId={closingRunner.id}
-                    runnerName={closingRunner.name}
-                    items={(byRunner[closingRunner.id]?.items || []).filter(i => i.status === 'active')}
-                    onClose={() => setClosingRunner(null)}
-                />
-            )}
+            {closingRunner && (() => {
+                const block = blocks.find(b => b.runnerId === closingRunner.id && b.date === closingRunner.date)
+                return (
+                    <BulkReturnModal
+                        runnerId={closingRunner.id}
+                        runnerName={closingRunner.name}
+                        dateLabel={block?.dateLabel || closingRunner.date}
+                        items={block?.allItems || []}
+                        onClose={() => setClosingRunner(null)}
+                    />
+                )
+            })()}
 
             {/* Admin Edit Return Modal */}
-            {editingRunner && (
-                <AdminEditReturnModal
-                    runnerId={editingRunner.id}
-                    runnerName={editingRunner.name}
-                    items={byRunner[editingRunner.id]?.items || []}
-                    onClose={() => setEditingRunner(null)}
-                />
-            )}
+            {editingRunner && (() => {
+                const block = blocks.find(b => b.runnerId === editingRunner.id && b.date === editingRunner.date)
+                return (
+                    <AdminEditReturnModal
+                        runnerId={editingRunner.id}
+                        runnerName={editingRunner.name}
+                        items={block?.allItems || []}
+                        onClose={() => setEditingRunner(null)}
+                    />
+                )
+            })()}
         </div>
     )
 }
@@ -352,11 +447,13 @@ type ReturnSummaryItem = {
 function BulkReturnModal({
     runnerId: _runnerId,
     runnerName,
+    dateLabel,
     items,
     onClose
 }: {
     runnerId: string
     runnerName: string
+    dateLabel: string
     items: BulkItem[]
     onClose: () => void
 }) {
@@ -424,20 +521,19 @@ function BulkReturnModal({
         <Dialog open onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="max-w-sm w-full max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl">
                 <DialogTitle className="sr-only">Cerrar Turno</DialogTitle>
-                
+
                 {/* Header */}
                 <div className="px-5 pt-5 pb-4 border-b">
                     <div className="flex items-center gap-2">
                         <RotateCcw className="h-4 w-4 text-orange-500 shrink-0" />
                         <span className="font-bold text-slate-800">Cerrar Turno</span>
                     </div>
-                    <p className="text-sm text-slate-500 mt-0.5 pl-6">{runnerName}</p>
+                    <p className="text-sm text-slate-500 mt-0.5 pl-6">{runnerName} · <span className="font-medium">{dateLabel}</span></p>
                 </div>
 
                 {/* ── PANTALLA 1: elegir acción ── */}
                 {screen === 'choose' && (
-                    <>
-                    <div className="flex-1 overflow-y-auto px-5 py-5">
+                    <div className="flex flex-col gap-3 px-5 py-5">
                         {/* resumen rápido */}
                         <div className="bg-slate-50 rounded-xl p-3 space-y-1.5">
                             {items.map(item => (
@@ -452,9 +548,6 @@ function BulkReturnModal({
                             </div>
                         </div>
 
-                    </div>
-
-                    <div className="px-5 pb-5 pt-3 border-t space-y-2">
                         {/* acción principal */}
                         <Button
                             className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl gap-2"
@@ -479,7 +572,6 @@ function BulkReturnModal({
                             <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>
-                    </>
                 )}
 
                 {/* ── PANTALLA 2: ingresar cantidades ── */}
@@ -648,7 +740,7 @@ function AdminEditReturnModal({
         <Dialog open onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="max-w-sm w-full max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl">
                 <DialogTitle className="sr-only">Corregir Devolución (Admin)</DialogTitle>
-                
+
                 {/* Header */}
                 <div className="px-5 pt-5 pb-4 border-b bg-slate-900">
                     <div className="flex items-center gap-2">
@@ -662,7 +754,7 @@ function AdminEditReturnModal({
                     <p className="text-xs text-slate-500 mb-2 bg-blue-50 text-blue-700 p-2 rounded-md">
                         Esta acción recalculará automáticamente el inventario del restaurante y el total vendido del corredor.
                     </p>
-                    
+
                     {items.map(item => {
                         const qty = returnQtys[item.id]
                         const isOver = (Number(qty) || 0) > item.assigned_qty
@@ -754,7 +846,6 @@ function AssignInventoryDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         const items = Object.entries(quantities)
             .filter(([_, qty]) => qty > 0)
             .map(([product_id, qty]) => ({ product_id, qty }))
-
         if (!selectedRunner) {
             toast.error('Selecciona un corredor')
             return

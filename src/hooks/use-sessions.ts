@@ -342,11 +342,13 @@ export function useRunnerInventory(runnerId?: string) {
                 .select(`
                     *,
                     runner:profiles!runner_id(id, full_name, role),
-                    product:products!product_id(id, name, price, category)
+                    product:products!product_id(id, name, price, category),
+                    assigner:profiles!assigned_by(full_name)
                 `)
                 .eq('organization_id', organization_id)
-                .eq('assignment_date', today)
-                .order('assigned_at', { ascending: false })
+                .or(`assignment_date.eq.${today},and(status.eq.active,assignment_date.lt.${today})`)
+                .order('assignment_date', { ascending: true })
+                .order('assigned_at', { ascending: true })
 
             if (runnerId) {
                 query = query.eq('runner_id', runnerId)
@@ -548,6 +550,102 @@ export function useRunnerSummary() {
             return Object.values(summary)
         },
         refetchInterval: 30000
+    })
+}
+
+// Monthly runner inventory assignments (for calendar dialog)
+// Padding ±1 day on assignment_date to capture UTC/Colombia boundary crossings
+// (e.g. assigned_at 9:45PM Colombia = assignment_date next day in UTC)
+// Frontend filters by assigned_at Colombia date for accuracy.
+export function useMonthlyRunnerInventory(startDate: Date, endDate: Date) {
+    const supabase = createClient()
+    const startStr = startDate.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const endStr = endDate.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    // Pad ±1 day to capture records where assignment_date (UTC) differs from assigned_at (Colombia)
+    const paddedStart = new Date(startDate)
+    paddedStart.setDate(paddedStart.getDate() - 1)
+    const paddedStartStr = paddedStart.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const paddedEnd = new Date(endDate)
+    paddedEnd.setDate(paddedEnd.getDate() + 1)
+    const paddedEndStr = paddedEnd.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    return useQuery({
+        queryKey: ['monthly-runner-inventory', startStr, endStr],
+        queryFn: async () => {
+            const { organization_id } = await getOrCreateProfile(supabase)
+            const { data, error } = await supabase
+                .from('runner_inventory_assignments')
+                .select(`
+                    runner_id, assigned_qty, returned_qty, status,
+                    assignment_date, assigned_at,
+                    runner:profiles!runner_id(full_name)
+                `)
+                .eq('organization_id', organization_id)
+                .gte('assignment_date', paddedStartStr)
+                .lte('assignment_date', paddedEndStr)
+                .order('assigned_at', { ascending: true })
+            if (error) throw error
+            return data || []
+        }
+    })
+}
+
+// Returns POS sales keyed by `${runnerId}__${date}` for all given dates
+export function useRunnerPOSSalesByDates(dates: string[]) {
+    const supabase = createClient()
+    return useQuery({
+        queryKey: ['runner-pos-sales-multi', dates.slice().sort().join(',')],
+        queryFn: async () => {
+            if (dates.length === 0) return {} as Record<string, number>
+            const { organization_id } = await getOrCreateProfile(supabase)
+            const result: Record<string, number> = {}
+            await Promise.all(dates.map(async (date) => {
+                const { data, error } = await supabase
+                    .from('sales')
+                    .select('seller_id, total')
+                    .eq('organization_id', organization_id)
+                    .eq('status', 'CONFIRMED')
+                    .gte('created_at', `${date}T00:00:00-05:00`)
+                    .lte('created_at', `${date}T23:59:59-05:00`)
+                if (error) return
+                for (const sale of data || []) {
+                    if (!sale.seller_id) continue
+                    const key = `${sale.seller_id}__${date}`
+                    result[key] = (result[key] || 0) + (sale.total || 0)
+                }
+            }))
+            return result
+        },
+        enabled: dates.length > 0
+    })
+}
+
+export function useUnclosedPreviousAssignments() {
+    const supabase = createClient()
+    return useQuery({
+        queryKey: ['unclosed-previous-assignments'],
+        queryFn: async () => {
+            const { organization_id } = await getOrCreateProfile(supabase)
+            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+            const { data, error } = await supabase
+                .from('runner_inventory_assignments')
+                .select('runner_id, assignment_date, runner:profiles!runner_id(full_name)')
+                .eq('organization_id', organization_id)
+                .eq('status', 'active')
+                .lt('assignment_date', today)
+            if (error) throw error
+            const seen = new Set<string>()
+            return (data || [])
+                .filter(r => {
+                    if (seen.has(r.runner_id)) return false
+                    seen.add(r.runner_id)
+                    return true
+                })
+                .map(r => ({
+                    runner_id: r.runner_id,
+                    runner_name: (r.runner as any)?.full_name || 'Corredor',
+                    assignment_date: r.assignment_date
+                }))
+        }
     })
 }
 
