@@ -100,7 +100,7 @@ export function CartSidebar() {
                 ) : (
                     <div className="space-y-3">
                         {items.map(item => (
-                            <CartItemRow key={item.id} item={item} />
+                            <CartItemRow key={item.cartItemId} item={item} />
                         ))}
                     </div>
                 )}

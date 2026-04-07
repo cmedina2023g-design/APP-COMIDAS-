@@ -300,11 +300,11 @@ function RunnersPanel() {
                                 </div>
                                 <div>
                                     <p className="text-muted-foreground">Vendido</p>
-                                    <p className="font-bold text-lg text-green-600">{runner.total_sold}</p>
+                                    <p className="font-bold text-lg text-green-600">{runner.total_sold_inv}</p>
                                 </div>
                                 <div>
                                     <p className="text-muted-foreground">Valor</p>
-                                    <p className="font-bold text-lg">${runner.total_value.toLocaleString()}</p>
+                                    <p className="font-bold text-lg">${(runner.total_value_inv || 0).toLocaleString()}</p>
                                 </div>
                             </div>
                         </CardContent>
