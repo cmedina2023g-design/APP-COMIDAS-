@@ -41,17 +41,28 @@ export default function POSPage() {
         'Bowls'
     ]
 
+    const isRunner = currentProfile?.role === 'RUNNER'
+    const runnerCategories = ['Fritanga', 'Bebidas']
+
+    // Set default category for runners
+    useEffect(() => {
+        if (isRunner && selectedCategory && !runnerCategories.includes(selectedCategory)) {
+            setSelectedCategory('Fritanga')
+        }
+    }, [isRunner])
+
     // Derive and sort categories by custom order
     const categories = useMemo(() => {
         const all = Array.from(new Set(products?.map(p => p.category).filter(Boolean) as string[]))
-        return all.sort((a, b) => {
+        const filtered = isRunner ? all.filter(c => runnerCategories.includes(c)) : all
+        return filtered.sort((a, b) => {
             const indexA = categoryOrder.indexOf(a)
             const indexB = categoryOrder.indexOf(b)
             const posA = indexA === -1 ? 999 : indexA
             const posB = indexB === -1 ? 999 : indexB
             return posA - posB
         })
-    }, [products, categoryOrder])
+    }, [products, categoryOrder, isRunner])
 
     // Get subcategories for selected category - simple version
     const subcategories = useMemo(() => {
@@ -73,9 +84,10 @@ export default function POSPage() {
             const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
             const matchCat = selectedCategory ? p.category === selectedCategory : true
             const matchSubcat = selectedSubcategory ? p.subcategory === selectedSubcategory : true
-            return matchSearch && matchCat && matchSubcat && p.active
+            const matchRunner = isRunner ? runnerCategories.includes(p.category || '') : true
+            return matchSearch && matchCat && matchSubcat && matchRunner && p.active
         }) || []
-    }, [products, search, selectedCategory, selectedSubcategory])
+    }, [products, search, selectedCategory, selectedSubcategory, isRunner])
 
     return (
         <div className="flex flex-col min-h-screen md:h-screen bg-slate-100 dark:bg-slate-950">
