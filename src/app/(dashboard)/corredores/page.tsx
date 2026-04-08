@@ -258,6 +258,12 @@ export default function CorredoresPage() {
 
                                     <div className="mt-3 border-t pt-2 space-y-1.5">
                                         <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-400">Estimado inventario</span>
+                                            <span className="font-semibold text-slate-600">
+                                                ${estimatedValue.toLocaleString()}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
                                             <span className="text-slate-500 flex items-center gap-1">
                                                 <TrendingUp className="h-3 w-3" />
                                                 Ventas POS
@@ -266,12 +272,26 @@ export default function CorredoresPage() {
                                                 {posAmount !== null ? `$${posAmount.toLocaleString()}` : '$0'}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span className="text-slate-400">Estimado inventario</span>
-                                            <span className="font-semibold text-slate-600">
-                                                ${estimatedValue.toLocaleString()}
-                                            </span>
-                                        </div>
+                                        {/* Cuadre: diferencia entre estimado inventario y POS */}
+                                        {(() => {
+                                            const pos = posAmount || 0
+                                            const diff = pos - estimatedValue
+                                            if (pos === 0 && estimatedValue === 0) return null
+                                            const cuadra = Math.abs(diff) < 100
+                                            return (
+                                                <div className={cn(
+                                                    "flex justify-between items-center text-xs px-2 py-1.5 rounded-lg mt-1",
+                                                    cuadra ? "bg-green-50" : diff > 0 ? "bg-blue-50" : "bg-red-50"
+                                                )}>
+                                                    <span className={cn("font-semibold", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
+                                                        {cuadra ? '✓ Cuadra' : diff > 0 ? '↑ Excedente POS' : '⚠️ Falta por registrar'}
+                                                    </span>
+                                                    <span className={cn("font-bold", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
+                                                        {cuadra ? '—' : `$${Math.abs(diff).toLocaleString()}`}
+                                                    </span>
+                                                </div>
+                                            )
+                                        })()}
                                     </div>
                                 </CardContent>
                             </Card>
@@ -431,11 +451,14 @@ export default function CorredoresPage() {
             {closingRunner && (() => {
                 const block = blocks.find(b => b.runnerId === closingRunner.id && b.date === closingRunner.date && b.shiftId === closingRunner.shiftId)
                 const shiftLabel = closingRunner.shiftName ? ` · ${closingRunner.shiftName}` : ''
+                const posKey = `${closingRunner.id}__${closingRunner.date}__${closingRunner.shiftId || 'none'}`
+                const posAmount = posSalesByDate[posKey] || 0
                 return (
                     <BulkReturnModal
                         runnerId={closingRunner.id}
                         runnerName={closingRunner.name}
                         dateLabel={(block?.dateLabel || closingRunner.date) + shiftLabel}
+                        posAmount={posAmount}
                         items={block?.allItems || []}
                         onClose={() => setClosingRunner(null)}
                     />
@@ -481,12 +504,14 @@ function BulkReturnModal({
     runnerId: _runnerId,
     runnerName,
     dateLabel,
+    posAmount,
     items,
     onClose
 }: {
     runnerId: string
     runnerName: string
     dateLabel: string
+    posAmount: number
     items: BulkItem[]
     onClose: () => void
 }) {
@@ -552,7 +577,7 @@ function BulkReturnModal({
 
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-sm w-full max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl">
+            <DialogContent className="max-w-sm w-[95vw] max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl">
                 <DialogTitle className="sr-only">Cerrar Turno</DialogTitle>
 
                 {/* Header */}
@@ -676,34 +701,70 @@ function BulkReturnModal({
                         </div>
 
                         <div className="rounded-xl border overflow-hidden">
-                            <div className="grid grid-cols-4 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                <span className="col-span-1">Producto</span>
-                                <span className="text-center">Asig.</span>
-                                <span className="text-center">Dev.</span>
-                                <span className="text-center">Vend.</span>
+                            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 bg-slate-100 px-3 py-2 text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                <span>Producto</span>
+                                <span className="w-9 sm:w-10 text-center">Asig.</span>
+                                <span className="w-9 sm:w-10 text-center">Dev.</span>
+                                <span className="w-9 sm:w-10 text-center">Vend.</span>
                             </div>
                             {summary.map((row, i) => (
-                                <div key={i} className="grid grid-cols-4 px-3 py-2.5 border-t text-sm items-center">
+                                <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3 py-2 border-t text-xs sm:text-sm items-center">
                                     <span className="font-medium text-slate-800 truncate pr-1">{row.name}</span>
-                                    <span className="text-center text-slate-500">{row.assigned}</span>
-                                    <span className="text-center text-yellow-600 font-medium">{row.returned}</span>
-                                    <span className="text-center text-green-600 font-bold">{row.sold}</span>
+                                    <span className="w-9 sm:w-10 text-center text-slate-500">{row.assigned}</span>
+                                    <span className="w-9 sm:w-10 text-center text-yellow-600 font-medium">{row.returned}</span>
+                                    <span className="w-9 sm:w-10 text-center text-green-600 font-bold">{row.sold}</span>
                                 </div>
                             ))}
-                            <div className="grid grid-cols-4 px-3 py-2.5 border-t bg-slate-50 text-sm font-bold">
+                            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3 py-2 border-t bg-slate-50 text-xs sm:text-sm font-bold">
                                 <span className="text-slate-700">Total</span>
-                                <span className="text-center text-slate-600">{summary.reduce((s, r) => s + r.assigned, 0)}</span>
-                                <span className="text-center text-yellow-700">{summary.reduce((s, r) => s + r.returned, 0)}</span>
-                                <span className="text-center text-green-700">{summary.reduce((s, r) => s + r.sold, 0)}</span>
+                                <span className="w-9 sm:w-10 text-center text-slate-600">{summary.reduce((s, r) => s + r.assigned, 0)}</span>
+                                <span className="w-9 sm:w-10 text-center text-yellow-700">{summary.reduce((s, r) => s + r.returned, 0)}</span>
+                                <span className="w-9 sm:w-10 text-center text-green-700">{summary.reduce((s, r) => s + r.sold, 0)}</span>
                             </div>
                         </div>
 
-                        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex justify-between items-center">
-                            <span className="text-sm font-medium text-green-700">Valor vendido estimado</span>
-                            <span className="text-lg font-bold text-green-700">
-                                ${summary.reduce((s, r) => s + r.value, 0).toLocaleString()}
-                            </span>
-                        </div>
+                        {/* Cuadre: Inventario vs POS */}
+                        {(() => {
+                            const estimado = summary.reduce((s, r) => s + r.value, 0)
+                            const diff = posAmount - estimado
+                            const cuadra = Math.abs(diff) < 100
+                            return (
+                                <div className="rounded-xl border overflow-hidden">
+                                    <div className="bg-slate-800 px-4 py-2.5">
+                                        <p className="text-xs font-bold text-white uppercase tracking-wider">Cuadre del Turno</p>
+                                    </div>
+                                    <div className="px-4 py-3 space-y-2.5">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-slate-600">Debe entregar (inventario)</span>
+                                            <span className="font-bold text-slate-800">${estimado.toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-slate-600">Registró en POS</span>
+                                            <span className="font-bold text-green-600">${posAmount.toLocaleString()}</span>
+                                        </div>
+                                        <div className="border-t my-1" />
+                                        <div className={cn(
+                                            "flex justify-between items-center text-sm px-3 py-2.5 rounded-lg",
+                                            cuadra ? "bg-green-50 border border-green-200" : diff > 0 ? "bg-blue-50 border border-blue-200" : "bg-red-50 border border-red-200"
+                                        )}>
+                                            <span className={cn("font-semibold", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
+                                                {cuadra ? '✓ Cuadra' : diff > 0 ? '↑ Excedente POS' : '⚠️ Falta por registrar'}
+                                            </span>
+                                            <span className={cn("font-bold text-base", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
+                                                {cuadra ? '—' : `$${Math.abs(diff).toLocaleString()}`}
+                                            </span>
+                                        </div>
+                                        {!cuadra && (
+                                            <p className="text-[10px] text-slate-400 text-center">
+                                                {diff > 0
+                                                    ? 'El corredor registró en POS más de lo que vendió por inventario'
+                                                    : 'El corredor vendió productos que no registró en el POS'}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        })()}
 
                         <Button className="w-full h-12 rounded-xl font-bold" onClick={onClose}>
                             Listo
@@ -771,7 +832,7 @@ function AdminEditReturnModal({
 
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-sm w-full max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl">
+            <DialogContent className="max-w-sm w-[95vw] max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl">
                 <DialogTitle className="sr-only">Corregir Devolución (Admin)</DialogTitle>
 
                 {/* Header */}
@@ -910,15 +971,15 @@ function AssignInventoryDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     Asignar Inventario
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col" aria-describedby="assign-inv-desc">
+            <DialogContent className="max-w-3xl w-[95vw] max-h-[90vh] overflow-hidden flex flex-col p-4 sm:p-6" aria-describedby="assign-inv-desc">
                 <DialogHeader>
-                    <DialogTitle>Asignar Inventario a Corredor</DialogTitle>
-                    <DialogDescription id="assign-inv-desc">
+                    <DialogTitle className="text-base sm:text-lg">Asignar Inventario a Corredor</DialogTitle>
+                    <DialogDescription id="assign-inv-desc" className="text-xs sm:text-sm">
                         Solo se asignarán los productos con cantidad mayor a 0.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
                     <div>
                         <Label>Corredor *</Label>
                         <Select value={selectedRunner} onValueChange={setSelectedRunner}>
@@ -1016,9 +1077,9 @@ function AssignInventoryDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 </div>
 
                 <DialogFooter className="mt-4 pt-4 border-t">
-                    <div className="flex items-center justify-between w-full">
-                        <span className="text-sm text-muted-foreground">
-                            {Object.values(quantities).filter(q => q > 0).length} productos · {totalItems} unidades
+                    <div className="flex items-center justify-between w-full gap-2">
+                        <span className="text-xs sm:text-sm text-muted-foreground shrink-0">
+                            {Object.values(quantities).filter(q => q > 0).length} prod. · {totalItems} unid.
                         </span>
                         <Button
                             onClick={handleSubmit}
