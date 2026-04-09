@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,9 @@ import {
     Users,
     Pencil,
     AlertTriangle,
-    Clock
+    Clock,
+    ShoppingCart,
+    Minus
 } from 'lucide-react'
 import Link from 'next/link'
 import {
@@ -39,6 +41,7 @@ import {
 } from '@/hooks/use-sessions'
 import { useProducts } from '@/hooks/use-products'
 import { useCurrentProfile } from '@/hooks/use-profiles'
+import { useCreateSale, usePaymentMethods } from '@/hooks/use-sales'
 import { cn } from '@/lib/utils'
 
 // ─────────────────────────────────────────────
@@ -66,6 +69,7 @@ export default function CorredoresPage() {
     const [assignOpen, setAssignOpen] = useState(false)
     const [closingRunner, setClosingRunner] = useState<{ id: string; name: string; date: string; shiftId: string | null; shiftName: string | null } | null>(null)
     const [editingRunner, setEditingRunner] = useState<{ id: string; name: string; date: string; shiftId: string | null } | null>(null)
+    const [registeringFor, setRegisteringFor] = useState<{ runnerId: string; runnerName: string; date: string; shiftId: string | null; dateLabel: string } | null>(null)
     const [expandedRunners, setExpandedRunners] = useState<Record<string, boolean>>({})
 
     // One block per (runner + date + shift). Within each block, events grouped by assigned_at.
@@ -446,6 +450,27 @@ export default function CorredoresPage() {
                                                     )
                                                 })()}
 
+                                                {/* Admin: Register POS sale on behalf of runner (only for active shifts) */}
+                                                {currentProfile?.role === 'ADMIN' && block.hasActive && (
+                                                    <div className="px-3 sm:px-4 py-2.5 bg-white border-t">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="w-full sm:w-auto h-10 border-blue-200 text-blue-700 hover:bg-blue-50 active:scale-[0.98]"
+                                                            onClick={() => setRegisteringFor({
+                                                                runnerId: block.runnerId,
+                                                                runnerName: block.runner?.full_name || block.runner?.email || 'Corredor',
+                                                                date: block.date,
+                                                                shiftId: block.shiftId,
+                                                                dateLabel: block.dateLabel + (block.shiftName ? ` · ${block.shiftName}` : '')
+                                                            })}
+                                                        >
+                                                            <ShoppingCart className="h-4 w-4 mr-2" />
+                                                            Registrar venta POS
+                                                        </Button>
+                                                    </div>
+                                                )}
+
                                                 {/* Assignment detail (when/by whom) */}
                                                 {block.events.length > 1 && (
                                                     <div className="border-t mt-1">
@@ -498,6 +523,33 @@ export default function CorredoresPage() {
                         posProductSales={posProductMap}
                         items={block?.allItems || []}
                         onClose={() => setClosingRunner(null)}
+                    />
+                )
+            })()}
+
+            {/* Register POS Sale Modal (admin only) */}
+            {registeringFor && (() => {
+                const block = blocks.find(b =>
+                    b.runnerId === registeringFor.runnerId &&
+                    b.date === registeringFor.date &&
+                    b.shiftId === registeringFor.shiftId
+                )
+                if (!block) return null
+                const posProductMap: Record<string, number> = {}
+                for (const item of block.allItemsAll) {
+                    const pid = item.product?.id || item.product_id
+                    const pk = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}__${pid}`
+                    posProductMap[pid] = posSalesByProduct[pk] || 0
+                }
+                return (
+                    <RegisterPOSSaleModal
+                        runnerId={registeringFor.runnerId}
+                        runnerName={registeringFor.runnerName}
+                        shiftId={registeringFor.shiftId}
+                        dateLabel={registeringFor.dateLabel}
+                        items={block.allItemsAll}
+                        posProductSales={posProductMap}
+                        onClose={() => setRegisteringFor(null)}
                     />
                 )
             })()}
@@ -1156,6 +1208,187 @@ function AssignInventoryDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                         </Button>
                     </div>
                 </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+// ─────────────────────────────────────────────
+// Register POS Sale Modal (admin registers a sale on behalf of a runner)
+// ─────────────────────────────────────────────
+function RegisterPOSSaleModal({
+    runnerId,
+    runnerName,
+    shiftId,
+    dateLabel,
+    items,
+    posProductSales,
+    onClose
+}: {
+    runnerId: string
+    runnerName: string
+    shiftId: string | null
+    dateLabel: string
+    items: Array<{ product: { id: string; name: string; price: number }; assigned_qty: number }>
+    posProductSales: Record<string, number>
+    onClose: () => void
+}) {
+    const createSale = useCreateSale()
+    const { data: paymentMethods = [] } = usePaymentMethods()
+    const [qtys, setQtys] = useState<Record<string, number>>({})
+    const [paymentMethodId, setPaymentMethodId] = useState<string | null>(null)
+
+    // Default to first payment method when loaded
+    useEffect(() => {
+        if (!paymentMethodId && paymentMethods.length > 0) {
+            setPaymentMethodId(paymentMethods[0].id)
+        }
+    }, [paymentMethods, paymentMethodId])
+
+    const total = items.reduce((s, i) => s + (qtys[i.product.id] || 0) * i.product.price, 0)
+    const totalUnits = Object.values(qtys).reduce((s, q) => s + q, 0)
+
+    const setQty = (pid: string, qty: number) => {
+        setQtys(prev => ({ ...prev, [pid]: Math.max(0, qty) }))
+    }
+
+    const handleConfirm = async () => {
+        const lineItems = items
+            .filter(i => (qtys[i.product.id] || 0) > 0)
+            .map(i => ({
+                id: i.product.id,
+                name: i.product.name,
+                price: i.product.price,
+                qty: qtys[i.product.id],
+                modifiers: []
+            }))
+        if (lineItems.length === 0 || !paymentMethodId) return
+        try {
+            await createSale.mutateAsync({
+                total,
+                payments: [{ methodId: paymentMethodId, amount: total }],
+                items: lineItems as any,
+                sellerId: runnerId,
+                shiftId
+            })
+            toast.success(`Venta registrada para ${runnerName}`, {
+                description: `${totalUnits} unid. · $${total.toLocaleString('es-CO')}`
+            })
+            onClose()
+        } catch {
+            // toast handled by useCreateSale onError
+        }
+    }
+
+    return (
+        <Dialog open onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="max-w-sm sm:max-w-md w-[95vw] max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl">
+                <DialogTitle className="sr-only">Registrar venta POS</DialogTitle>
+
+                {/* Header */}
+                <div className="px-5 pt-5 pb-4 border-b">
+                    <div className="flex items-center gap-2">
+                        <ShoppingCart className="h-4 w-4 text-blue-500 shrink-0" />
+                        <span className="font-bold text-slate-800">Registrar venta POS</span>
+                    </div>
+                    <p className="text-sm text-slate-500 mt-0.5 pl-6">{runnerName} · <span className="font-medium">{dateLabel}</span></p>
+                </div>
+
+                {/* Scrollable content */}
+                <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4 space-y-3">
+                    {items.map(item => {
+                        const pid = item.product.id
+                        const posSold = posProductSales[pid] || 0
+                        const quedan = Math.max(0, item.assigned_qty - posSold)
+                        const qty = qtys[pid] || 0
+                        const subtotal = qty * item.product.price
+                        return (
+                            <div key={pid} className="bg-slate-50 rounded-xl p-3">
+                                <div className="flex justify-between items-center gap-3">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-medium text-slate-800 truncate text-sm sm:text-base">{item.product.name}</p>
+                                        <p className="text-xs text-slate-500">${item.product.price.toLocaleString('es-CO')} c/u</p>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">
+                                            Asig: {item.assigned_qty} · POS: {posSold} · Quedan: {quedan}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-10 w-10 p-0 active:scale-95"
+                                            onClick={() => setQty(pid, qty - 1)}
+                                            disabled={qty === 0}
+                                        >
+                                            <Minus className="h-4 w-4" />
+                                        </Button>
+                                        <Input
+                                            type="number"
+                                            inputMode="numeric"
+                                            min={0}
+                                            value={qty || ''}
+                                            onChange={(e) => setQty(pid, parseInt(e.target.value) || 0)}
+                                            placeholder="0"
+                                            className="w-16 h-10 text-center px-1 text-base font-semibold"
+                                        />
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-10 w-10 p-0 active:scale-95"
+                                            onClick={() => setQty(pid, qty + 1)}
+                                        >
+                                            <Plus className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                                {qty > 0 && (
+                                    <div className="mt-2 pt-2 border-t border-slate-200 flex justify-between text-xs">
+                                        <span className="text-slate-500">Subtotal</span>
+                                        <span className="font-semibold text-slate-800">${subtotal.toLocaleString('es-CO')}</span>
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
+
+                    {/* Payment method selector */}
+                    <div className="pt-2">
+                        <Label className="text-xs text-slate-500 uppercase tracking-wide">Método de pago</Label>
+                        <Select value={paymentMethodId || undefined} onValueChange={setPaymentMethodId}>
+                            <SelectTrigger className="mt-1.5 h-11">
+                                <SelectValue placeholder="Selecciona método de pago" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {paymentMethods.map((pm: any) => (
+                                    <SelectItem key={pm.id} value={pm.id}>{pm.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                {/* Fixed footer */}
+                <div className="shrink-0 border-t px-4 sm:px-5 py-4 bg-white">
+                    <div className="flex justify-between items-center mb-3">
+                        <span className="text-sm text-slate-500">Total ({totalUnits} unid.)</span>
+                        <span className="text-2xl sm:text-3xl font-bold text-slate-800">${total.toLocaleString('es-CO')}</span>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" className="flex-1 h-11" onClick={onClose} disabled={createSale.isPending}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-base font-semibold"
+                            onClick={handleConfirm}
+                            disabled={total === 0 || !paymentMethodId || createSale.isPending}
+                        >
+                            {createSale.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                            Registrar venta
+                        </Button>
+                    </div>
+                </div>
             </DialogContent>
         </Dialog>
     )

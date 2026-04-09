@@ -25,11 +25,15 @@ export function useCreateSale() {
         mutationFn: async ({
             total,
             payments,
-            items
+            items,
+            sellerId,
+            shiftId
         }: {
             total: number
             payments: { methodId: string, amount: number }[]
             items: CartItem[]
+            sellerId?: string
+            shiftId?: string | null
         }) => {
             const { user, organization_id } = await getOrCreateProfile(supabase)
 
@@ -53,13 +57,27 @@ export function useCreateSale() {
 
             const { data, error } = await supabase.rpc('create_sale', {
                 p_organization_id: organization_id,
-                p_seller_id: user.id,
+                p_seller_id: sellerId || user.id,
                 p_payments: payloadPayments,
                 p_total: total,
                 p_items: payloadItems
             })
 
             if (error) throw error
+
+            // If shiftId was explicitly provided (admin registering on behalf of runner),
+            // tag the sale with the shift so it's associated with the correct block,
+            // even if created_at falls outside the shift's time range.
+            if (shiftId && data) {
+                const { error: updateError } = await supabase
+                    .from('sales')
+                    .update({ shift_id: shiftId })
+                    .eq('id', data)
+                if (updateError) {
+                    console.error('Failed to tag sale with shift_id:', updateError)
+                }
+            }
+
             return data // Returns Sale ID
         },
         onSuccess: () => {
@@ -70,6 +88,8 @@ export function useCreateSale() {
             queryClient.invalidateQueries({ queryKey: ['daily-product-summary'] })
             queryClient.invalidateQueries({ queryKey: ['shift-sales'] })
             queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+            queryClient.invalidateQueries({ queryKey: ['runner-pos-sales-by-product'] })
+            queryClient.invalidateQueries({ queryKey: ['runner-pos-sales-by-dates'] })
         },
         onError: (err: any) => {
             toast.error('Error al procesar venta', { description: err.message })
