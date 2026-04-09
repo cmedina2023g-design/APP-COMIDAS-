@@ -213,6 +213,15 @@ export default function CorredoresPage() {
                             return s + (posSalesByProduct[pk] || 0)
                         }, 0)
                         const quedan = assigned - totalPosSoldUnits
+                        // Money the runner should deliver based on inventory sold (assigned - quedan) × price
+                        const debeEntregar = consolidatedProducts.reduce((s: number, i: any) => {
+                            const pid = i.product?.id || i.product_id
+                            const pk = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}__${pid}`
+                            const posSold = posSalesByProduct[pk] || 0
+                            // Only count what was sold from inventory (min of POS sold and assigned)
+                            const soldFromInventory = Math.min(posSold, i.assigned_qty)
+                            return s + soldFromInventory * (i.product?.price || 0)
+                        }, 0)
                         const posKey = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}`
                         const posAmount: number | null = posKey in posSalesByDate ? posSalesByDate[posKey] : null
                         return (
@@ -266,7 +275,11 @@ export default function CorredoresPage() {
                                         </div>
                                     </div>
 
-                                    <div className="mt-3 border-t pt-2">
+                                    <div className="mt-3 border-t pt-2 space-y-1.5">
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-600 font-semibold">Debe entregar</span>
+                                            <span className="font-bold text-slate-800">${debeEntregar.toLocaleString()}</span>
+                                        </div>
                                         <div className="flex justify-between items-center text-xs">
                                             <span className="text-slate-500 flex items-center gap-1">
                                                 <TrendingUp className="h-3 w-3" />
@@ -276,6 +289,25 @@ export default function CorredoresPage() {
                                                 {posAmount !== null ? `$${posAmount.toLocaleString()}` : '$0'}
                                             </span>
                                         </div>
+                                        {(() => {
+                                            const pos = posAmount || 0
+                                            const diff = pos - debeEntregar
+                                            if (pos === 0 && debeEntregar === 0) return null
+                                            const cuadra = Math.abs(diff) < 100
+                                            return (
+                                                <div className={cn(
+                                                    "flex justify-between items-center text-xs px-2 py-1.5 rounded-lg",
+                                                    cuadra ? "bg-green-50" : diff > 0 ? "bg-blue-50" : "bg-red-50"
+                                                )}>
+                                                    <span className={cn("font-semibold", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
+                                                        {cuadra ? '✓ Cuadra' : diff > 0 ? '↑ Excedente' : '⚠️ Diferencia'}
+                                                    </span>
+                                                    <span className={cn("font-bold", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
+                                                        {cuadra ? '—' : `$${Math.abs(diff).toLocaleString()}`}
+                                                    </span>
+                                                </div>
+                                            )
+                                        })()}
                                     </div>
                                 </CardContent>
                             </Card>
