@@ -34,7 +34,8 @@ import {
     useShifts,
     useAdminEditClosedReturns,
     useUnclosedPreviousAssignments,
-    useRunnerPOSSalesByDates
+    useRunnerPOSSalesByDates,
+    useRunnerPOSSalesByProduct
 } from '@/hooks/use-sessions'
 import { useProducts } from '@/hooks/use-products'
 import { useCurrentProfile } from '@/hooks/use-profiles'
@@ -61,6 +62,7 @@ export default function CorredoresPage() {
         return Array.from(dates)
     }, [inventory])
     const { data: posSalesByDate = {} } = useRunnerPOSSalesByDates(blockDates)
+    const { data: posSalesByProduct = {} } = useRunnerPOSSalesByProduct(blockDates)
     const [assignOpen, setAssignOpen] = useState(false)
     const [closingRunner, setClosingRunner] = useState<{ id: string; name: string; date: string; shiftId: string | null; shiftName: string | null } | null>(null)
     const [editingRunner, setEditingRunner] = useState<{ id: string; name: string; date: string; shiftId: string | null } | null>(null)
@@ -203,10 +205,14 @@ export default function CorredoresPage() {
             {blocks.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     {blocks.map(block => {
-                        const allProducts = block.events.flatMap(e => e.items)
-                        const assigned = allProducts.reduce((s: number, i: any) => s + i.assigned_qty, 0)
-                        const returned = allProducts.reduce((s: number, i: any) => s + i.returned_qty, 0)
-                        const estimatedValue = allProducts.reduce((s: number, i: any) => s + (i.assigned_qty - i.returned_qty) * (i.product?.price || 0), 0)
+                        const consolidatedProducts = block.allItemsAll
+                        const assigned = consolidatedProducts.reduce((s: number, i: any) => s + i.assigned_qty, 0)
+                        const totalPosSoldUnits = consolidatedProducts.reduce((s: number, i: any) => {
+                            const pid = i.product?.id || i.product_id
+                            const pk = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}__${pid}`
+                            return s + (posSalesByProduct[pk] || 0)
+                        }, 0)
+                        const quedan = assigned - totalPosSoldUnits
                         const posKey = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}`
                         const posAmount: number | null = posKey in posSalesByDate ? posSalesByDate[posKey] : null
                         return (
@@ -245,24 +251,22 @@ export default function CorredoresPage() {
                                         )}
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-3 gap-2">
                                         <div className="bg-slate-50 rounded-lg p-2 text-center">
                                             <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mb-0.5">Asignado</p>
                                             <p className="font-bold text-base text-slate-800">{assigned}</p>
                                         </div>
-                                        <div className="bg-yellow-50 rounded-lg p-2 text-center">
-                                            <p className="text-[10px] text-yellow-600 font-medium uppercase tracking-wide mb-0.5">Devuelto</p>
-                                            <p className="font-bold text-base text-yellow-700">{returned}</p>
+                                        <div className="bg-blue-50 rounded-lg p-2 text-center">
+                                            <p className="text-[10px] text-blue-600 font-medium uppercase tracking-wide mb-0.5">Vendido POS</p>
+                                            <p className="font-bold text-base text-blue-700">{totalPosSoldUnits}</p>
+                                        </div>
+                                        <div className={cn("rounded-lg p-2 text-center", quedan === 0 ? "bg-green-50" : quedan > 0 ? "bg-orange-50" : "bg-red-50")}>
+                                            <p className={cn("text-[10px] font-medium uppercase tracking-wide mb-0.5", quedan === 0 ? "text-green-600" : quedan > 0 ? "text-orange-600" : "text-red-600")}>Quedan</p>
+                                            <p className={cn("font-bold text-base", quedan === 0 ? "text-green-700" : quedan > 0 ? "text-orange-700" : "text-red-700")}>{quedan}</p>
                                         </div>
                                     </div>
 
-                                    <div className="mt-3 border-t pt-2 space-y-1.5">
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span className="text-slate-400">Estimado inventario</span>
-                                            <span className="font-semibold text-slate-600">
-                                                ${estimatedValue.toLocaleString()}
-                                            </span>
-                                        </div>
+                                    <div className="mt-3 border-t pt-2">
                                         <div className="flex justify-between items-center text-xs">
                                             <span className="text-slate-500 flex items-center gap-1">
                                                 <TrendingUp className="h-3 w-3" />
@@ -272,26 +276,6 @@ export default function CorredoresPage() {
                                                 {posAmount !== null ? `$${posAmount.toLocaleString()}` : '$0'}
                                             </span>
                                         </div>
-                                        {/* Cuadre: diferencia entre estimado inventario y POS */}
-                                        {(() => {
-                                            const pos = posAmount || 0
-                                            const diff = pos - estimatedValue
-                                            if (pos === 0 && estimatedValue === 0) return null
-                                            const cuadra = Math.abs(diff) < 100
-                                            return (
-                                                <div className={cn(
-                                                    "flex justify-between items-center text-xs px-2 py-1.5 rounded-lg mt-1",
-                                                    cuadra ? "bg-green-50" : diff > 0 ? "bg-blue-50" : "bg-red-50"
-                                                )}>
-                                                    <span className={cn("font-semibold", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
-                                                        {cuadra ? '✓ Cuadra' : diff > 0 ? '↑ Excedente POS' : '⚠️ Falta por registrar'}
-                                                    </span>
-                                                    <span className={cn("font-bold", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
-                                                        {cuadra ? '—' : `$${Math.abs(diff).toLocaleString()}`}
-                                                    </span>
-                                                </div>
-                                            )
-                                        })()}
                                     </div>
                                 </CardContent>
                             </Card>
@@ -391,52 +375,65 @@ export default function CorredoresPage() {
                                         {/* Events expanded — each assignment as its own sub-section */}
                                         {isExpanded && (
                                             <div className="divide-y">
-                                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 sm:gap-x-4 px-3 sm:px-4 py-2 bg-white text-xs font-medium text-slate-400 uppercase tracking-wide">
+                                                {/* Consolidated view: Asig | POS | Quedan (merged by product across all events) */}
+                                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 sm:gap-x-3 px-3 sm:px-4 py-2 bg-white text-xs font-medium text-slate-400 uppercase tracking-wide">
                                                     <span>Producto</span>
-                                                    <span className="w-10 text-center">Asig.</span>
-                                                    <span className="w-10 text-center">Dev.</span>
-                                                    <span className="w-10 text-center">Vend.</span>
+                                                    <span className="w-9 sm:w-10 text-center">Asig.</span>
+                                                    <span className="w-9 sm:w-10 text-center">POS</span>
+                                                    <span className="w-10 sm:w-12 text-center">Quedan</span>
                                                 </div>
-                                                {block.events.map((event, ei) => {
-                                                    const timeLabel = event.assignedAt
-                                                        ? new Date(event.assignedAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' })
-                                                        : ''
-                                                    const eTotal = event.items.reduce((s: any, i: any) => ({ assigned: s.assigned + i.assigned_qty, returned: s.returned + i.returned_qty }), { assigned: 0, returned: 0 })
+                                                {block.allItemsAll.map((item: any) => {
+                                                    const pid = item.product?.id || item.product_id
+                                                    const posKey = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}__${pid}`
+                                                    const posSold = posSalesByProduct[posKey] || 0
+                                                    const quedan = item.assigned_qty - posSold
                                                     return (
-                                                        <div key={ei}>
-                                                            {/* Event sub-header */}
-                                                            <div className={cn(
-                                                                "px-4 py-1.5 flex items-center gap-2 text-xs font-semibold",
-                                                                event.hasActive ? "bg-blue-50 text-blue-700" : "bg-slate-50 text-slate-500"
-                                                            )}>
-                                                                <Clock className="h-3 w-3" />
-                                                                <span>{timeLabel}</span>
-                                                                {event.assignerName && <span className="font-normal opacity-70">· por {event.assignerName}</span>}
-                                                                {!event.hasActive && <span className="ml-auto text-[10px]">Cerrado</span>}
-                                                            </div>
-                                                            {event.items.map((item: any) => {
-                                                                const sold = item.assigned_qty - item.returned_qty
-                                                                return (
-                                                                    <div key={`${block.key}-${ei}-${item.product?.id || item.product_id}`} className={cn(
-                                                                        "grid grid-cols-[1fr_auto_auto_auto] gap-x-3 sm:gap-x-4 px-3 sm:px-4 py-2.5 items-center text-sm",
-                                                                        !event.hasActive ? 'bg-slate-50/50 opacity-70' : 'bg-white hover:bg-slate-50'
-                                                                    )}>
-                                                                        <p className="font-medium text-slate-800 truncate">{item.product?.name}</p>
-                                                                        <p className="w-10 text-center font-semibold text-slate-700">{item.assigned_qty}</p>
-                                                                        <p className="w-10 text-center font-semibold text-yellow-600">{item.returned_qty}</p>
-                                                                        <p className={cn("w-10 text-center font-bold", sold > 0 ? "text-green-600" : sold < 0 ? "text-red-500" : "text-slate-400")}>{sold}</p>
-                                                                    </div>
-                                                                )
-                                                            })}
-                                                            <div className={cn("grid grid-cols-[1fr_auto_auto_auto] gap-x-3 sm:gap-x-4 px-3 sm:px-4 py-1.5 text-xs font-bold border-t", event.hasActive ? "bg-blue-50/50 text-blue-800" : "bg-slate-100 text-slate-500")}>
-                                                                <span>Subtotal</span>
-                                                                <span className="w-10 text-center">{eTotal.assigned}</span>
-                                                                <span className="w-10 text-center">{eTotal.returned}</span>
-                                                                <span className="w-10 text-center">{eTotal.assigned - eTotal.returned}</span>
-                                                            </div>
+                                                        <div key={`${block.key}-consolidated-${pid}`} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 sm:gap-x-3 px-3 sm:px-4 py-2.5 items-center text-sm bg-white hover:bg-slate-50">
+                                                            <p className="font-medium text-slate-800 truncate">{item.product?.name}</p>
+                                                            <p className="w-9 sm:w-10 text-center font-semibold text-slate-700">{item.assigned_qty}</p>
+                                                            <p className="w-9 sm:w-10 text-center font-semibold text-blue-600">{posSold}</p>
+                                                            <p className={cn("w-10 sm:w-12 text-center font-bold", quedan === 0 ? "text-green-600" : quedan > 0 ? "text-orange-500" : "text-red-500")}>{quedan}</p>
                                                         </div>
                                                     )
                                                 })}
+                                                {/* Total row */}
+                                                {(() => {
+                                                    const totals = block.allItemsAll.reduce((s: any, i: any) => {
+                                                        const pid = i.product?.id || i.product_id
+                                                        const pk = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}__${pid}`
+                                                        const ps = posSalesByProduct[pk] || 0
+                                                        return { assigned: s.assigned + i.assigned_qty, pos: s.pos + ps, quedan: s.quedan + (i.assigned_qty - ps) }
+                                                    }, { assigned: 0, pos: 0, quedan: 0 })
+                                                    return (
+                                                        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 sm:gap-x-3 px-3 sm:px-4 py-2 text-xs font-bold border-t bg-slate-50 text-slate-700">
+                                                            <span>Total</span>
+                                                            <span className="w-9 sm:w-10 text-center">{totals.assigned}</span>
+                                                            <span className="w-9 sm:w-10 text-center text-blue-600">{totals.pos}</span>
+                                                            <span className={cn("w-10 sm:w-12 text-center", totals.quedan === 0 ? "text-green-600" : totals.quedan > 0 ? "text-orange-500" : "text-red-500")}>{totals.quedan}</span>
+                                                        </div>
+                                                    )
+                                                })()}
+
+                                                {/* Assignment detail (when/by whom) */}
+                                                {block.events.length > 1 && (
+                                                    <div className="border-t mt-1">
+                                                        <p className="px-4 py-2 text-[10px] text-slate-400 uppercase tracking-wide font-medium">Detalle de asignaciones</p>
+                                                        {block.events.map((event, ei) => {
+                                                            const timeLabel = event.assignedAt
+                                                                ? new Date(event.assignedAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' })
+                                                                : ''
+                                                            return (
+                                                                <div key={ei} className="px-4 py-1.5 flex items-center gap-2 text-xs text-slate-500">
+                                                                    <Clock className="h-3 w-3" />
+                                                                    <span className="font-semibold">{timeLabel}</span>
+                                                                    {event.assignerName && <span className="opacity-70">· por {event.assignerName}</span>}
+                                                                    <span className="opacity-70">· {event.items.reduce((s: number, i: any) => s + i.assigned_qty, 0)} unid.</span>
+                                                                    {!event.hasActive && <span className="ml-auto text-[10px]">Cerrado</span>}
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -453,12 +450,20 @@ export default function CorredoresPage() {
                 const shiftLabel = closingRunner.shiftName ? ` · ${closingRunner.shiftName}` : ''
                 const posKey = `${closingRunner.id}__${closingRunner.date}__${closingRunner.shiftId || 'none'}`
                 const posAmount = posSalesByDate[posKey] || 0
+                // Build per-product POS sales map for this block
+                const posProductMap: Record<string, number> = {}
+                for (const item of block?.allItems || []) {
+                    const pid = item.product?.id || item.product_id
+                    const ppKey = `${closingRunner.id}__${closingRunner.date}__${closingRunner.shiftId || 'none'}__${pid}`
+                    posProductMap[pid] = posSalesByProduct[ppKey] || 0
+                }
                 return (
                     <BulkReturnModal
                         runnerId={closingRunner.id}
                         runnerName={closingRunner.name}
                         dateLabel={(block?.dateLabel || closingRunner.date) + shiftLabel}
                         posAmount={posAmount}
+                        posProductSales={posProductMap}
                         items={block?.allItems || []}
                         onClose={() => setClosingRunner(null)}
                     />
@@ -486,7 +491,7 @@ export default function CorredoresPage() {
 // ─────────────────────────────────────────────
 type BulkItem = {
     id: string
-    product: { name: string; price: number }
+    product: { id: string; name: string; price: number }
     assigned_qty: number
     returned_qty: number
     _ids?: { id: string; assigned_qty: number }[]  // aggregated sub-assignments
@@ -505,6 +510,7 @@ function BulkReturnModal({
     runnerName,
     dateLabel,
     posAmount,
+    posProductSales,
     items,
     onClose
 }: {
@@ -512,13 +518,19 @@ function BulkReturnModal({
     runnerName: string
     dateLabel: string
     posAmount: number
+    posProductSales: Record<string, number>
     items: BulkItem[]
     onClose: () => void
 }) {
     const bulkReturn = useBulkReturnInventory()
     const [screen, setScreen] = useState<'choose' | 'input' | 'summary'>('choose')
     const [returnQtys, setReturnQtys] = useState<Record<string, number | ''>>(() =>
-        Object.fromEntries(items.map(i => [i.id, '']))
+        Object.fromEntries(items.map(i => {
+            const pid = i.product?.id || i.id
+            const posSold = posProductSales[pid] || 0
+            const suggested = Math.max(0, i.assigned_qty - posSold)
+            return [i.id, suggested]
+        }))
     )
     const [summary, setSummary] = useState<ReturnSummaryItem[] | null>(null)
 
@@ -591,45 +603,60 @@ function BulkReturnModal({
 
                 {/* ── PANTALLA 1: elegir acción ── */}
                 {screen === 'choose' && (
-                    <div className="flex flex-col gap-3 px-5 py-5">
-                        {/* resumen rápido */}
-                        <div className="bg-slate-50 rounded-xl p-3 space-y-1.5">
-                            {items.map(item => (
-                                <div key={item.id} className="flex justify-between text-sm">
-                                    <span className="text-slate-600 truncate pr-2">{item.product?.name}</span>
-                                    <span className="font-semibold text-slate-800 shrink-0">{item.assigned_qty} unid.</span>
+                    <>
+                        <div className="flex-1 overflow-y-auto px-5 pt-4 pb-2">
+                            {/* resumen rápido con POS */}
+                            <div className="bg-slate-50 rounded-xl p-3 space-y-1.5">
+                                {items.map(item => {
+                                    const pid = item.product?.id || item.id
+                                    const posSold = posProductSales[pid] || 0
+                                    const quedan = Math.max(0, item.assigned_qty - posSold)
+                                    return (
+                                        <div key={item.id} className="text-sm">
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-600 truncate pr-2">{item.product?.name}</span>
+                                                <span className="font-semibold text-slate-800 shrink-0">{item.assigned_qty} asig.</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs text-slate-400 pl-1">
+                                                <span>{posSold} vendidos POS</span>
+                                                <span className={cn("font-semibold", quedan === 0 ? "text-green-600" : "text-orange-500")}>
+                                                    quedan {quedan}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                                <div className="border-t pt-1.5 mt-1 flex justify-between text-sm font-bold text-slate-700">
+                                    <span>Total asignado</span>
+                                    <span>{totalAssigned} unid.</span>
                                 </div>
-                            ))}
-                            <div className="border-t pt-1.5 mt-1 flex justify-between text-sm font-bold text-slate-700">
-                                <span>Total asignado</span>
-                                <span>{totalAssigned} unid.</span>
                             </div>
                         </div>
 
-                        {/* acción principal */}
-                        <Button
-                            className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl gap-2"
-                            onClick={handleAllSold}
-                            disabled={bulkReturn.isPending}
-                        >
-                            {bulkReturn.isPending
-                                ? <Loader2 className="h-5 w-5 animate-spin" />
-                                : <><CheckCircle className="h-5 w-5" /> Todo vendido</>
-                            }
-                        </Button>
-                        <p className="text-center text-xs text-slate-400 -mt-1">No hubo ninguna devolución</p>
-
-                        {/* acción secundaria */}
-                        <Button
-                            variant="outline"
-                            className="w-full h-12 rounded-xl text-slate-600 gap-1"
-                            onClick={() => setScreen('input')}
-                            disabled={bulkReturn.isPending}
-                        >
-                            Hubo devolución
-                            <ChevronRight className="h-4 w-4" />
-                        </Button>
-                    </div>
+                        {/* Botones fijos abajo */}
+                        <div className="px-5 pb-5 pt-3 border-t space-y-2 shrink-0">
+                            <Button
+                                className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl gap-2"
+                                onClick={handleAllSold}
+                                disabled={bulkReturn.isPending}
+                            >
+                                {bulkReturn.isPending
+                                    ? <Loader2 className="h-5 w-5 animate-spin" />
+                                    : <><CheckCircle className="h-5 w-5" /> Todo vendido</>
+                                }
+                            </Button>
+                            <p className="text-center text-xs text-slate-400 -mt-1">No hubo ninguna devolución</p>
+                            <Button
+                                variant="outline"
+                                className="w-full h-12 rounded-xl text-slate-600 gap-1"
+                                onClick={() => setScreen('input')}
+                                disabled={bulkReturn.isPending}
+                            >
+                                Hubo devolución
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </>
                 )}
 
                 {/* ── PANTALLA 2: ingresar cantidades ── */}
@@ -640,6 +667,9 @@ function BulkReturnModal({
                             {items.map(item => {
                                 const qty = returnQtys[item.id]
                                 const isOver = (Number(qty) || 0) > item.assigned_qty
+                                const pid = item.product?.id || item.id
+                                const posSold = posProductSales[pid] || 0
+                                const suggested = Math.max(0, item.assigned_qty - posSold)
                                 return (
                                     <div key={item.id} className={cn(
                                         "flex items-center gap-3 px-4 py-3 rounded-xl border",
@@ -647,7 +677,7 @@ function BulkReturnModal({
                                     )}>
                                         <div className="flex-1 min-w-0">
                                             <p className="font-medium text-sm text-slate-800 truncate">{item.product?.name}</p>
-                                            <p className="text-xs text-slate-400">{item.assigned_qty} asignados</p>
+                                            <p className="text-xs text-slate-400">{item.assigned_qty} asig. · {posSold} POS · sugerido: {suggested}</p>
                                         </div>
                                         <Input
                                             type="number"
@@ -694,82 +724,86 @@ function BulkReturnModal({
 
                 {/* ── PANTALLA 3: resumen ── */}
                 {screen === 'summary' && summary && (
-                    <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
-                        <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-                            <CheckCircle className="h-5 w-5 shrink-0" />
-                            <p className="text-sm font-semibold">Turno cerrado exitosamente</p>
+                    <>
+                        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+                            <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                                <CheckCircle className="h-5 w-5 shrink-0" />
+                                <p className="text-sm font-semibold">Turno cerrado exitosamente</p>
+                            </div>
+
+                            <div className="rounded-xl border overflow-hidden">
+                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 bg-slate-100 px-3 py-2 text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                    <span>Producto</span>
+                                    <span className="w-9 sm:w-10 text-center">Asig.</span>
+                                    <span className="w-9 sm:w-10 text-center">Dev.</span>
+                                    <span className="w-9 sm:w-10 text-center">Vend.</span>
+                                </div>
+                                {summary.map((row, i) => (
+                                    <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3 py-2 border-t text-xs sm:text-sm items-center">
+                                        <span className="font-medium text-slate-800 truncate pr-1">{row.name}</span>
+                                        <span className="w-9 sm:w-10 text-center text-slate-500">{row.assigned}</span>
+                                        <span className="w-9 sm:w-10 text-center text-yellow-600 font-medium">{row.returned}</span>
+                                        <span className="w-9 sm:w-10 text-center text-green-600 font-bold">{row.sold}</span>
+                                    </div>
+                                ))}
+                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3 py-2 border-t bg-slate-50 text-xs sm:text-sm font-bold">
+                                    <span className="text-slate-700">Total</span>
+                                    <span className="w-9 sm:w-10 text-center text-slate-600">{summary.reduce((s, r) => s + r.assigned, 0)}</span>
+                                    <span className="w-9 sm:w-10 text-center text-yellow-700">{summary.reduce((s, r) => s + r.returned, 0)}</span>
+                                    <span className="w-9 sm:w-10 text-center text-green-700">{summary.reduce((s, r) => s + r.sold, 0)}</span>
+                                </div>
+                            </div>
+
+                            {/* Cuadre: Inventario vs POS */}
+                            {(() => {
+                                const estimado = summary.reduce((s, r) => s + r.value, 0)
+                                const diff = posAmount - estimado
+                                const cuadra = Math.abs(diff) < 100
+                                return (
+                                    <div className="rounded-xl border overflow-hidden">
+                                        <div className="bg-slate-800 px-4 py-2.5">
+                                            <p className="text-xs font-bold text-white uppercase tracking-wider">Cuadre del Turno</p>
+                                        </div>
+                                        <div className="px-4 py-3 space-y-2.5">
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-600">Debe entregar (inventario)</span>
+                                                <span className="font-bold text-slate-800">${estimado.toLocaleString()}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-600">Registró en POS</span>
+                                                <span className="font-bold text-green-600">${posAmount.toLocaleString()}</span>
+                                            </div>
+                                            <div className="border-t my-1" />
+                                            <div className={cn(
+                                                "flex justify-between items-center text-sm px-3 py-2.5 rounded-lg",
+                                                cuadra ? "bg-green-50 border border-green-200" : diff > 0 ? "bg-blue-50 border border-blue-200" : "bg-red-50 border border-red-200"
+                                            )}>
+                                                <span className={cn("font-semibold", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
+                                                    {cuadra ? '✓ Cuadra' : diff > 0 ? '↑ Excedente POS' : '⚠️ Falta por registrar'}
+                                                </span>
+                                                <span className={cn("font-bold text-base", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
+                                                    {cuadra ? '—' : `$${Math.abs(diff).toLocaleString()}`}
+                                                </span>
+                                            </div>
+                                            {!cuadra && (
+                                                <p className="text-[10px] text-slate-400 text-center">
+                                                    {diff > 0
+                                                        ? 'El corredor registró en POS más de lo que vendió por inventario'
+                                                        : 'El corredor vendió productos que no registró en el POS'}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                )
+                            })()}
                         </div>
 
-                        <div className="rounded-xl border overflow-hidden">
-                            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 bg-slate-100 px-3 py-2 text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                <span>Producto</span>
-                                <span className="w-9 sm:w-10 text-center">Asig.</span>
-                                <span className="w-9 sm:w-10 text-center">Dev.</span>
-                                <span className="w-9 sm:w-10 text-center">Vend.</span>
-                            </div>
-                            {summary.map((row, i) => (
-                                <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3 py-2 border-t text-xs sm:text-sm items-center">
-                                    <span className="font-medium text-slate-800 truncate pr-1">{row.name}</span>
-                                    <span className="w-9 sm:w-10 text-center text-slate-500">{row.assigned}</span>
-                                    <span className="w-9 sm:w-10 text-center text-yellow-600 font-medium">{row.returned}</span>
-                                    <span className="w-9 sm:w-10 text-center text-green-600 font-bold">{row.sold}</span>
-                                </div>
-                            ))}
-                            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3 py-2 border-t bg-slate-50 text-xs sm:text-sm font-bold">
-                                <span className="text-slate-700">Total</span>
-                                <span className="w-9 sm:w-10 text-center text-slate-600">{summary.reduce((s, r) => s + r.assigned, 0)}</span>
-                                <span className="w-9 sm:w-10 text-center text-yellow-700">{summary.reduce((s, r) => s + r.returned, 0)}</span>
-                                <span className="w-9 sm:w-10 text-center text-green-700">{summary.reduce((s, r) => s + r.sold, 0)}</span>
-                            </div>
+                        <div className="px-5 pb-5 pt-3 border-t shrink-0">
+                            <Button className="w-full h-12 rounded-xl font-bold" onClick={onClose}>
+                                Listo
+                            </Button>
                         </div>
-
-                        {/* Cuadre: Inventario vs POS */}
-                        {(() => {
-                            const estimado = summary.reduce((s, r) => s + r.value, 0)
-                            const diff = posAmount - estimado
-                            const cuadra = Math.abs(diff) < 100
-                            return (
-                                <div className="rounded-xl border overflow-hidden">
-                                    <div className="bg-slate-800 px-4 py-2.5">
-                                        <p className="text-xs font-bold text-white uppercase tracking-wider">Cuadre del Turno</p>
-                                    </div>
-                                    <div className="px-4 py-3 space-y-2.5">
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-slate-600">Debe entregar (inventario)</span>
-                                            <span className="font-bold text-slate-800">${estimado.toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-slate-600">Registró en POS</span>
-                                            <span className="font-bold text-green-600">${posAmount.toLocaleString()}</span>
-                                        </div>
-                                        <div className="border-t my-1" />
-                                        <div className={cn(
-                                            "flex justify-between items-center text-sm px-3 py-2.5 rounded-lg",
-                                            cuadra ? "bg-green-50 border border-green-200" : diff > 0 ? "bg-blue-50 border border-blue-200" : "bg-red-50 border border-red-200"
-                                        )}>
-                                            <span className={cn("font-semibold", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
-                                                {cuadra ? '✓ Cuadra' : diff > 0 ? '↑ Excedente POS' : '⚠️ Falta por registrar'}
-                                            </span>
-                                            <span className={cn("font-bold text-base", cuadra ? "text-green-700" : diff > 0 ? "text-blue-700" : "text-red-700")}>
-                                                {cuadra ? '—' : `$${Math.abs(diff).toLocaleString()}`}
-                                            </span>
-                                        </div>
-                                        {!cuadra && (
-                                            <p className="text-[10px] text-slate-400 text-center">
-                                                {diff > 0
-                                                    ? 'El corredor registró en POS más de lo que vendió por inventario'
-                                                    : 'El corredor vendió productos que no registró en el POS'}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                            )
-                        })()}
-
-                        <Button className="w-full h-12 rounded-xl font-bold" onClick={onClose}>
-                            Listo
-                        </Button>
-                    </div>
+                    </>
                 )}
             </DialogContent>
         </Dialog>

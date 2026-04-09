@@ -610,7 +610,7 @@ export function useMonthlyRunnerInventory(startDate: Date, endDate: Date) {
 }
 
 // Helper: determine shift_id from sale time using shift definitions
-function resolveShiftId(sale: { shift_id: string | null; created_at: string }, shifts: Shift[]): string | null {
+export function resolveShiftId(sale: { shift_id: string | null; created_at: string }, shifts: Shift[]): string | null {
     if (sale.shift_id) return sale.shift_id
     if (!shifts.length) return null
     // Get Colombia time HH:mm from created_at
@@ -662,6 +662,57 @@ export function useRunnerPOSSalesByDates(dates: string[]) {
                     // Legacy key (total per runner+date, used by calendar)
                     const legacyKey = `${sale.seller_id}__${date}`
                     result[legacyKey] = (result[legacyKey] || 0) + (sale.total || 0)
+                }
+            }))
+            return result
+        },
+        enabled: dates.length > 0
+    })
+}
+
+// Returns POS sales by product keyed by `${sellerId}__${date}__${shiftId||'none'}__${productId}` → qty sold
+export function useRunnerPOSSalesByProduct(dates: string[]) {
+    const supabase = createClient()
+    return useQuery({
+        queryKey: ['runner-pos-sales-by-product', dates.slice().sort().join(',')],
+        queryFn: async () => {
+            if (dates.length === 0) return {} as Record<string, number>
+            const { organization_id } = await getOrCreateProfile(supabase)
+
+            const { data: shifts } = await supabase
+                .from('shifts')
+                .select('*')
+                .eq('organization_id', organization_id)
+                .eq('active', true)
+                .order('start_time')
+            const shiftList = (shifts || []) as Shift[]
+
+            const result: Record<string, number> = {}
+            await Promise.all(dates.map(async (date) => {
+                const { data, error } = await supabase
+                    .from('sale_items')
+                    .select(`
+                        product_id,
+                        qty,
+                        sale:sales!inner(
+                            seller_id,
+                            shift_id,
+                            created_at,
+                            organization_id,
+                            status
+                        )
+                    `)
+                    .eq('sale.organization_id', organization_id)
+                    .eq('sale.status', 'CONFIRMED')
+                    .gte('sale.created_at', `${date}T00:00:00-05:00`)
+                    .lte('sale.created_at', `${date}T23:59:59-05:00`)
+                if (error) return
+                for (const item of data || []) {
+                    const sale = item.sale as any
+                    if (!sale?.seller_id) continue
+                    const resolvedShift = resolveShiftId({ shift_id: sale.shift_id, created_at: sale.created_at }, shiftList)
+                    const key = `${sale.seller_id}__${date}__${resolvedShift || 'none'}__${item.product_id}`
+                    result[key] = (result[key] || 0) + (item.qty || 0)
                 }
             }))
             return result
