@@ -1,13 +1,13 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useMonthlyReport, useRunnerSales, useRunnerSaleDetails } from '@/hooks/use-reports'
 import { useReceivables } from '@/hooks/use-sales'
-import { useShiftSales, useShiftPaymentMethods, useRunnerPaymentMethods, useMonthlyRunnerInventory } from '@/hooks/use-sessions'
+import { useShiftSales, useShiftPaymentMethods, useRunnerPaymentMethods, useMonthlyRunnerInventory, useRunnerPOSSalesByProduct } from '@/hooks/use-sessions'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isSameDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Loader2, TrendingUp, TrendingDown, DollarSign, Award, AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Sun, Moon, UserCircle, Store, CheckCircle2, ArrowRight } from 'lucide-react'
@@ -44,6 +44,13 @@ export default function CalendarReportPage() {
 
     // Fetch monthly runner inventory (for dialog)
     const { data: monthlyInventory = [] } = useMonthlyRunnerInventory(startOfMonth(currentDate), endOfMonth(currentDate))
+
+    // Compute all dates in month for POS sales by product
+    const monthDates = useMemo(() => {
+        const days = eachDayOfInterval({ start: startOfMonth(currentDate), end: endOfMonth(currentDate) })
+        return days.map(d => format(d, 'yyyy-MM-dd'))
+    }, [currentDate])
+    const { data: posSalesByProduct = {} } = useRunnerPOSSalesByProduct(monthDates)
 
     const handlePrevMonth = () => {
         setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
@@ -313,12 +320,13 @@ export default function CalendarReportPage() {
                 paymentMethods={paymentMethods}
                 runnerPaymentMethods={runnerPaymentMethods}
                 monthlyInventory={monthlyInventory}
+                posSalesByProduct={posSalesByProduct}
             />
         </div>
     )
 }
 
-function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSales, paymentMethods, runnerPaymentMethods, monthlyInventory }: {
+function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSales, paymentMethods, runnerPaymentMethods, monthlyInventory, posSalesByProduct }: {
     isOpen: boolean
     onClose: () => void
     date: Date | null
@@ -328,7 +336,9 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
     paymentMethods: any[] | undefined
     runnerPaymentMethods: any[] | undefined
     monthlyInventory: any[]
+    posSalesByProduct: Record<string, { qty: number; revenue: number }>
 }) {
+    const [expandedInventory, setExpandedInventory] = useState<string | null>(null)
     if (!date) return null
     const dateStr = format(date, 'yyyy-MM-dd')
 
@@ -361,18 +371,42 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
             : row.assignment_date
         return colDate === dateStr
     })
-    // Group by runner
-    const inventoryByRunner: Record<string, { name: string; assigned: number; returned: number; status: string }> = {}
+
+    // Group by runner+shift, with consolidated products
+    type RunnerBlock = {
+        runnerId: string
+        name: string
+        shiftId: string | null
+        status: string
+        products: Array<{ id: string; name: string; price: number; assigned_qty: number }>
+    }
+    const blockMap: Record<string, RunnerBlock> = {}
     for (const row of dayInventoryRows) {
         const rid = row.runner_id
-        if (!inventoryByRunner[rid]) {
-            inventoryByRunner[rid] = { name: (row.runner as any)?.full_name || 'Corredor', assigned: 0, returned: 0, status: row.status }
+        const sid = row.shift_id || 'none'
+        const bk = `${rid}__${sid}`
+        if (!blockMap[bk]) {
+            blockMap[bk] = {
+                runnerId: rid,
+                name: (row.runner as any)?.full_name || 'Corredor',
+                shiftId: row.shift_id || null,
+                status: row.status,
+                products: []
+            }
         }
-        inventoryByRunner[rid].assigned += row.assigned_qty || 0
-        inventoryByRunner[rid].returned += row.returned_qty || 0
-        if (row.status === 'active') inventoryByRunner[rid].status = 'active'
+        if (row.status === 'active') blockMap[bk].status = 'active'
+        const pid = row.product_id || (row.product as any)?.id
+        const pname = (row.product as any)?.name || 'Producto'
+        const pprice = (row.product as any)?.price || 0
+        // Consolidate same product
+        const existing = blockMap[bk].products.find(p => p.id === pid)
+        if (existing) {
+            existing.assigned_qty += row.assigned_qty || 0
+        } else {
+            blockMap[bk].products.push({ id: pid, name: pname, price: pprice, assigned_qty: row.assigned_qty || 0 })
+        }
     }
-    const dayInventorySummary = Object.values(inventoryByRunner)
+    const inventoryBlocks = Object.entries(blockMap).map(([key, block]) => ({ key, ...block }))
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -537,28 +571,112 @@ function DayDetailsDialog({ isOpen, onClose, date, report, shiftSales, runnerSal
                         </p>
                     </div>
 
-                    {/* Runner Inventory Section */}
-                    {dayInventorySummary.length > 0 && (
-                        <div className="space-y-2 pt-2 border-t">
+                    {/* Runner Inventory Detail Section */}
+                    {inventoryBlocks.length > 0 && (
+                        <div className="space-y-3 pt-2 border-t">
                             <h4 className="text-sm font-semibold text-slate-700">Inventario Corredores</h4>
-                            <div className="grid grid-cols-4 gap-1 text-[10px] font-medium text-slate-400 uppercase px-1">
-                                <span className="col-span-2">Corredor</span>
-                                <span className="text-center">Asignado</span>
-                                <span className="text-center">Devuelto</span>
-                            </div>
-                            {dayInventorySummary.map((inv, i) => {
+                            {inventoryBlocks.map(block => {
+                                const isExpanded = expandedInventory === block.key
+                                const totalAssigned = block.products.reduce((s, p) => s + p.assigned_qty, 0)
+                                const totalPosSold = block.products.reduce((s, p) => {
+                                    const pk = `${block.runnerId}__${dateStr}__${block.shiftId || 'none'}__${p.id}`
+                                    return s + (posSalesByProduct[pk]?.qty || 0)
+                                }, 0)
+                                const totalQuedan = totalAssigned - totalPosSold
+                                const debeEntregar = block.products.reduce((s, p) => {
+                                    const pk = `${block.runnerId}__${dateStr}__${block.shiftId || 'none'}__${p.id}`
+                                    const posData = posSalesByProduct[pk]
+                                    if (!posData || posData.qty === 0) return s
+                                    const soldFromInv = Math.min(posData.qty, p.assigned_qty)
+                                    const avgPrice = posData.revenue / posData.qty
+                                    return s + soldFromInv * avgPrice
+                                }, 0)
+                                // Get POS total from runnerSales
+                                const runnerPOS = dayRunners.find((r: any) => r.runner_id === block.runnerId)
+                                const posAmount = runnerPOS ? parseFloat(runnerPOS.total_sales) : 0
+
                                 return (
-                                    <div key={i} className="grid grid-cols-4 gap-1 items-center bg-slate-50 rounded px-2 py-1.5 border text-sm">
-                                        <div className="col-span-2 flex items-center gap-1.5">
-                                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${inv.status === 'active' ? 'bg-orange-400' : 'bg-green-400'}`} />
-                                            <span className="font-medium truncate">{inv.name}</span>
-                                        </div>
-                                        <span className="text-center text-slate-600">{inv.assigned}</span>
-                                        <span className="text-center text-yellow-600">{inv.returned}</span>
+                                    <div key={block.key} className="rounded-lg border overflow-hidden">
+                                        <button
+                                            type="button"
+                                            className="w-full flex justify-between items-center px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors"
+                                            onClick={() => setExpandedInventory(isExpanded ? null : block.key)}
+                                        >
+                                            <div className="flex items-center gap-1.5">
+                                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${block.status === 'active' ? 'bg-orange-400' : 'bg-green-400'}`} />
+                                                <span className="font-medium text-sm">{block.name}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-right text-xs">
+                                                    <span className="text-slate-500">{totalAssigned} asig.</span>
+                                                    <span className="mx-1 text-slate-300">·</span>
+                                                    <span className="text-blue-600 font-medium">{totalPosSold} POS</span>
+                                                    <span className="mx-1 text-slate-300">·</span>
+                                                    <span className={cn("font-bold", totalQuedan === 0 ? "text-green-600" : totalQuedan > 0 ? "text-orange-500" : "text-red-500")}>
+                                                        {totalQuedan} quedan
+                                                    </span>
+                                                </div>
+                                                <ChevronDown className={cn("h-4 w-4 text-slate-400 transition-transform", isExpanded && "rotate-180")} />
+                                            </div>
+                                        </button>
+                                        {isExpanded && (
+                                            <div className="bg-white">
+                                                {/* Product table */}
+                                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3 py-1.5 text-[10px] font-medium text-slate-400 uppercase tracking-wide border-t">
+                                                    <span>Producto</span>
+                                                    <span className="w-9 text-center">Asig.</span>
+                                                    <span className="w-9 text-center">POS</span>
+                                                    <span className="w-10 text-center">Quedan</span>
+                                                </div>
+                                                {block.products.map(p => {
+                                                    const pk = `${block.runnerId}__${dateStr}__${block.shiftId || 'none'}__${p.id}`
+                                                    const posSold = posSalesByProduct[pk]?.qty || 0
+                                                    const quedan = p.assigned_qty - posSold
+                                                    return (
+                                                        <div key={p.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3 py-1.5 items-center text-xs border-t border-slate-50">
+                                                            <span className="font-medium text-slate-700 truncate">{p.name}</span>
+                                                            <span className="w-9 text-center text-slate-600">{p.assigned_qty}</span>
+                                                            <span className="w-9 text-center text-blue-600 font-medium">{posSold}</span>
+                                                            <span className={cn("w-10 text-center font-bold", quedan === 0 ? "text-green-600" : quedan > 0 ? "text-orange-500" : "text-red-500")}>{quedan}</span>
+                                                        </div>
+                                                    )
+                                                })}
+                                                {/* Totals row */}
+                                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3 py-1.5 text-xs font-bold border-t bg-slate-50">
+                                                    <span>Total</span>
+                                                    <span className="w-9 text-center">{totalAssigned}</span>
+                                                    <span className="w-9 text-center text-blue-600">{totalPosSold}</span>
+                                                    <span className={cn("w-10 text-center", totalQuedan === 0 ? "text-green-600" : totalQuedan > 0 ? "text-orange-500" : "text-red-500")}>{totalQuedan}</span>
+                                                </div>
+                                                {/* Money summary */}
+                                                <div className="px-3 py-2 border-t space-y-1.5">
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="text-slate-500">Debe entregar</span>
+                                                        <span className="font-bold text-slate-800">${debeEntregar.toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="text-slate-500">Ventas POS $</span>
+                                                        <span className="font-bold text-green-600">${posAmount.toLocaleString()}</span>
+                                                    </div>
+                                                    {posAmount > 0 && (() => {
+                                                        const diff = posAmount - debeEntregar
+                                                        const cuadra = Math.abs(diff) < 100
+                                                        return (
+                                                            <div className={cn(
+                                                                "flex justify-between text-xs px-2 py-1.5 rounded-md",
+                                                                cuadra ? "bg-green-50 text-green-700" : diff > 0 ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700"
+                                                            )}>
+                                                                <span>{cuadra ? 'Cuadra' : diff > 0 ? 'Excedente' : 'Diferencia'}</span>
+                                                                <span className="font-bold">{diff > 0 ? '+' : ''}${diff.toLocaleString()}</span>
+                                                            </div>
+                                                        )
+                                                    })()}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )
                             })}
-                            <p className="text-[10px] text-slate-400">● naranja = sin cerrar · ● verde = cerrado · Vendido = Asignado − Devuelto</p>
                         </div>
                     )}
 

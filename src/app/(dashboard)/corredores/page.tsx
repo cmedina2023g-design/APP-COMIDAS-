@@ -214,17 +214,19 @@ export default function CorredoresPage() {
                         const totalPosSoldUnits = consolidatedProducts.reduce((s: number, i: any) => {
                             const pid = i.product?.id || i.product_id
                             const pk = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}__${pid}`
-                            return s + (posSalesByProduct[pk] || 0)
+                            return s + (posSalesByProduct[pk]?.qty || 0)
                         }, 0)
                         const quedan = assigned - totalPosSoldUnits
                         // Money the runner should deliver based on inventory sold (assigned - quedan) × price
                         const debeEntregar = consolidatedProducts.reduce((s: number, i: any) => {
                             const pid = i.product?.id || i.product_id
                             const pk = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}__${pid}`
-                            const posSold = posSalesByProduct[pk] || 0
-                            // Only count what was sold from inventory (min of POS sold and assigned)
-                            const soldFromInventory = Math.min(posSold, i.assigned_qty)
-                            return s + soldFromInventory * (i.product?.price || 0)
+                            const posData = posSalesByProduct[pk]
+                            if (!posData || posData.qty === 0) return s
+                            const soldFromInventory = Math.min(posData.qty, i.assigned_qty)
+                            // Use actual POS revenue (avg price) instead of catalog price
+                            const avgPrice = posData.revenue / posData.qty
+                            return s + soldFromInventory * avgPrice
                         }, 0)
                         const posKey = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}`
                         const posAmount: number | null = posKey in posSalesByDate ? posSalesByDate[posKey] : null
@@ -421,7 +423,7 @@ export default function CorredoresPage() {
                                                 {block.allItemsAll.map((item: any) => {
                                                     const pid = item.product?.id || item.product_id
                                                     const posKey = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}__${pid}`
-                                                    const posSold = posSalesByProduct[posKey] || 0
+                                                    const posSold = posSalesByProduct[posKey]?.qty || 0
                                                     const quedan = item.assigned_qty - posSold
                                                     return (
                                                         <div key={`${block.key}-consolidated-${pid}`} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 sm:gap-x-3 px-3 sm:px-4 py-2.5 items-center text-sm bg-white hover:bg-slate-50">
@@ -437,7 +439,7 @@ export default function CorredoresPage() {
                                                     const totals = block.allItemsAll.reduce((s: any, i: any) => {
                                                         const pid = i.product?.id || i.product_id
                                                         const pk = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}__${pid}`
-                                                        const ps = posSalesByProduct[pk] || 0
+                                                        const ps = posSalesByProduct[pk]?.qty || 0
                                                         return { assigned: s.assigned + i.assigned_qty, pos: s.pos + ps, quedan: s.quedan + (i.assigned_qty - ps) }
                                                     }, { assigned: 0, pos: 0, quedan: 0 })
                                                     return (
@@ -512,7 +514,7 @@ export default function CorredoresPage() {
                 for (const item of block?.allItems || []) {
                     const pid = item.product?.id || item.product_id
                     const ppKey = `${closingRunner.id}__${closingRunner.date}__${closingRunner.shiftId || 'none'}__${pid}`
-                    posProductMap[pid] = posSalesByProduct[ppKey] || 0
+                    posProductMap[pid] = posSalesByProduct[ppKey]?.qty || 0
                 }
                 return (
                     <BulkReturnModal
@@ -539,7 +541,7 @@ export default function CorredoresPage() {
                 for (const item of block.allItemsAll) {
                     const pid = item.product?.id || item.product_id
                     const pk = `${block.runnerId}__${block.date}__${block.shiftId || 'none'}__${pid}`
-                    posProductMap[pid] = posSalesByProduct[pk] || 0
+                    posProductMap[pid] = posSalesByProduct[pk]?.qty || 0
                 }
                 return (
                     <RegisterPOSSaleModal

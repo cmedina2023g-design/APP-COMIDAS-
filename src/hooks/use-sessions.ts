@@ -595,9 +595,10 @@ export function useMonthlyRunnerInventory(startDate: Date, endDate: Date) {
             const { data, error } = await supabase
                 .from('runner_inventory_assignments')
                 .select(`
-                    runner_id, assigned_qty, returned_qty, status,
-                    assignment_date, assigned_at,
-                    runner:profiles!runner_id(full_name)
+                    runner_id, product_id, assigned_qty, returned_qty, status,
+                    assignment_date, assigned_at, shift_id,
+                    runner:profiles!runner_id(full_name),
+                    product:products!product_id(id, name, price)
                 `)
                 .eq('organization_id', organization_id)
                 .gte('assignment_date', paddedStartStr)
@@ -676,7 +677,7 @@ export function useRunnerPOSSalesByProduct(dates: string[]) {
     return useQuery({
         queryKey: ['runner-pos-sales-by-product', dates.slice().sort().join(',')],
         queryFn: async () => {
-            if (dates.length === 0) return {} as Record<string, number>
+            if (dates.length === 0) return {} as Record<string, { qty: number; revenue: number }>
             const { organization_id } = await getOrCreateProfile(supabase)
 
             const { data: shifts } = await supabase
@@ -687,13 +688,14 @@ export function useRunnerPOSSalesByProduct(dates: string[]) {
                 .order('start_time')
             const shiftList = (shifts || []) as Shift[]
 
-            const result: Record<string, number> = {}
+            const result: Record<string, { qty: number; revenue: number }> = {}
             await Promise.all(dates.map(async (date) => {
                 const { data, error } = await supabase
                     .from('sale_items')
                     .select(`
                         product_id,
                         qty,
+                        unit_price,
                         sale:sales!inner(
                             seller_id,
                             shift_id,
@@ -712,7 +714,9 @@ export function useRunnerPOSSalesByProduct(dates: string[]) {
                     if (!sale?.seller_id) continue
                     const resolvedShift = resolveShiftId({ shift_id: sale.shift_id, created_at: sale.created_at }, shiftList)
                     const key = `${sale.seller_id}__${date}__${resolvedShift || 'none'}__${item.product_id}`
-                    result[key] = (result[key] || 0) + (item.qty || 0)
+                    if (!result[key]) result[key] = { qty: 0, revenue: 0 }
+                    result[key].qty += (item.qty || 0)
+                    result[key].revenue += (item.qty || 0) * (item.unit_price || 0)
                 }
             }))
             return result
